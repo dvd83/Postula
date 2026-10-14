@@ -3,3 +3,8 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), geolocation=(), microphone=(self)
   X-Frame-Options: DENY
+
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Content-Type: application/manifest+json

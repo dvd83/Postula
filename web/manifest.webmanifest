@@ -1,0 +1,17 @@
+{
+  "name": "Postula – CV, lettre et entretien",
+  "short_name": "Postula",
+  "description": "Colle une offre : CV adapté, lettre de motivation et entretien de 5 minutes noté sur 10.",
+  "lang": "fr-CH",
+  "start_url": "/?source=app",
+  "scope": "/",
+  "id": "/",
+  "display": "minimal-ui",
+  "background_color": "#F4F5F9",
+  "theme_color": "#172036",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

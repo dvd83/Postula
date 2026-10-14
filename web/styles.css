@@ -377,3 +377,16 @@ section[data-step].enter{animation:stepin .32s var(--ease)}
   .steps .n{width:32px;height:32px;font-size:14px}
   .steps ol::before,.steps ol::after{top:15px}
 }
+
+/* Alternative LinkedIn (pas de CV) */
+.li-alt{border:1px dashed var(--line);border-radius:14px;padding:0 14px;background:var(--paper)}
+.li-alt summary{cursor:pointer;list-style:none;padding:12px 26px 12px 0;font-weight:600;position:relative;color:var(--blue)}
+.li-alt summary::-webkit-details-marker{display:none}
+.li-alt summary::after{content:"+";position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:18px}
+.li-alt[open] summary::after{content:"–"}
+.li-alt[open]{padding-bottom:14px}
+.li-alt p{margin:0;font-size:14px;line-height:1.5}
+.li-alt textarea{width:100%}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--ink-2);cursor:pointer}
+.linkbtn:hover{color:var(--ink);text-decoration:underline}
+.linkbtn[hidden]{display:none}

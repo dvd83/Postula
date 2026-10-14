@@ -220,7 +220,7 @@ const setHdr=()=>document.documentElement.style.setProperty("--hdr",header.offse
 setHdr(); try{new ResizeObserver(setHdr).observe(header)}catch(e){addEventListener("resize",setHdr)}
 addEventListener("scroll",()=>header.classList.toggle("scrolled",scrollY>4),{passive:true});
 let toastTimer=null;
-function toast(text){const t=$("#toast");t.textContent=text;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),2600)}
+function toast(text,ms){const t=$("#toast");t.textContent=text;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),ms||2600)}
 document.addEventListener("click",e=>{
   const m=$("#accMenu"); if(m&&m.open&&(!m.contains(e.target)||e.target.closest(".acc-pop .btn"))) m.open=false;
   const c=e.target.closest("[data-login]"); if(c){e.preventDefault();$("#connexion").scrollIntoView({behavior:"smooth",block:"start"});setTimeout(()=>$("#loginGoogle").focus({preventScroll:true}),450)}
@@ -423,12 +423,30 @@ const cvStore={
 $("#forgetCv").onclick=async()=>{
   await cvStore.clear(); $("#cvSaved").hidden=true; S.cv=null;
   $("#dropTitle").textContent="Dépose ton CV ici"; $("#dropSub").textContent="ou clique pour choisir un fichier .docx ou .pdf";
-  $("#adaptBtn").disabled=true; $("#themeBtn").disabled=true; $("#photoRow").hidden=true;
+  $("#adaptBtn").disabled=true; $("#themeBtn").disabled=true; $("#photoRow").hidden=true; $("#dlThemeDocx").hidden=true; $("#dlThemePdf").hidden=true;
   setViews({},null); $("#viewer").innerHTML='<div class="empty"><span class="sheet-ghost" aria-hidden="true"></span>L\'aperçu de ton CV s\'affichera ici.</div>';
   if(S.offer.info) renderOffer(); toast("CV oublié sur cet appareil");
 };
+function useProfileText(text,restored){
+  show("#cvMsg",""); S.changes=[];S.adaptedBlob=null;S.adaptedText="";S.cvData=null;S.themePdf=null;S.photo=null;$("#photoRow").hidden=true;
+  $("#changesCard").hidden=true;$("#dlDocx").hidden=true;$("#dlThemePdf").hidden=true;$("#dlThemeDocx").hidden=true;$("#kwBox").hidden=true;
+  S.cv={kind:"text",name:"Profil LinkedIn",text:text.slice(0,40000)};
+  $("#dropTitle").textContent="Profil LinkedIn"; $("#dropSub").textContent="Texte collé · mis en forme avec le thème choisi ci-dessous";
+  $("#adaptBtn").disabled=false; $("#themeBtn").disabled=false; $("#cvSaved").hidden=false; $("#liAlt").open=false;
+  setViews({},null); $("#viewer").innerHTML='<div class="empty"><span class="sheet-ghost" aria-hidden="true"></span>Ton CV apparaîtra ici une fois mis en forme.</div>';
+  if(!restored) cvStore.save({name:"Profil LinkedIn",kind:"text",text:S.cv.text,savedAt:Date.now()});
+  updateKw(); if(S.offer.info) renderOffer();
+}
+$("#useProfile").onclick=()=>{
+  const t=$("#profileText").value.trim();
+  if(t.length<200){show("#profileMsg","Colle un peu plus de ton profil : au minimum ton parcours (expériences) et ta formation.","err");return}
+  show("#profileMsg",""); useProfileText(t);
+  if(S.offer.info) $("#adaptBtn").click(); else show("#cvMsg","Profil enregistré. Analyse l'offre à l'étape 1, puis reviens ici pour créer ton CV.","info");
+};
 async function restoreCv(){
-  const v=await cvStore.get(); if(!v||!v.buf||S.cv) return;
+  const v=await cvStore.get(); if(!v||S.cv) return;
+  if(v.kind==="text"&&v.text){ useProfileText(v.text,true); return; }
+  if(!v.buf) return;
   await loadCv(new File([v.buf],v.name,{type:v.type||""}),true);
   if(S.offer.info) renderOffer();
 }
@@ -454,7 +472,8 @@ async function loadCv(f,restored){
       S.cv={kind:"pdf",name,buf,text};
       $("#dropSub").textContent="PDF · contenu adapté puis remis en forme avec le thème choisi";
       setViews({"Original":el=>renderPdfInto(el,buf)},"Original");
-      show("#cvMsg","Un PDF ne se modifie pas proprement sur place. Le contenu sera adapté puis mis en forme avec le thème choisi ci-dessous. Pour garder ta mise en page exacte, charge plutôt ton CV en .docx.","info");
+      if(/linkedin\.com\/in\//i.test(text)) show("#cvMsg","Profil LinkedIn reconnu : il sera transformé en CV avec le thème choisi ci-dessous.","info");
+      else show("#cvMsg","Un PDF ne se modifie pas proprement sur place. Le contenu sera adapté puis mis en forme avec le thème choisi ci-dessous. Pour garder ta mise en page exacte, charge plutôt ton CV en .docx.","info");
     }
     $("#adaptBtn").disabled=false; $("#themeBtn").disabled=false; updateKw();
     findPhoto(ext,buf);
@@ -593,7 +612,7 @@ $("#adaptBtn").onclick=async()=>{
   const btn=$("#adaptBtn"); show("#cvMsg","");
   if(!S.cv)return;
   if(!(await ensureOffer("#cvMsg")))return;
-  if(S.cv.kind==="pdf"){ $("#themeBtn").click(); return; }
+  if(S.cv.kind!=="docx"){ $("#themeBtn").click(); return; }
   try{need();busy(btn,true,"Adaptation…");
     const d=await parseDocx(S.cv.buf);
     const payload=d.paras.map((x,i)=>({i,s:x.segs.map(s=>s.text)}));
@@ -650,10 +669,10 @@ function slug(s){return String(s||"").replace(/[\\/:*?"<>|]/g,"").trim().slice(0
 
 /* ---------- Thèmes PDF ---------- */
 const THEMES=[
-  {id:"moderne",name:"Moderne",font:"helvetica",layout:"sidebar",accent:"#0E7A68",ink:"#1B2421"},
-  {id:"classique",name:"Classique",font:"times",layout:"single",accent:"#1F3A5F",ink:"#1A1D24"},
-  {id:"executif",name:"Exécutif",font:"helvetica",layout:"band",accent:"#B08A2E",ink:"#22262E"},
-  {id:"epure",name:"Épuré",font:"helvetica",layout:"gutter",accent:"#8A3B5C",ink:"#1E1E22"}
+  {id:"moderne",name:"Moderne",font:"Carlito",word:"Calibri",layout:"sidebar",accent:"#0E7A68",ink:"#1B2421"},
+  {id:"classique",name:"Classique",font:"Caladea",word:"Cambria",layout:"single",accent:"#1F3A5F",ink:"#1A1D24"},
+  {id:"executif",name:"Exécutif",font:"Carlito",word:"Calibri",layout:"band",accent:"#9A7424",ink:"#22262E"},
+  {id:"epure",name:"Épuré",font:"Poppins",word:"Calibri Light",layout:"gutter",accent:"#8A3B5C",ink:"#1E1E22"}
 ];
 function themeThumb(t){
   const a=t.accent,i=t.ink;
@@ -672,32 +691,115 @@ $("#themeBtn").onclick=async()=>{
     const o=S.offer.info, src=S.adaptedText||S.cv.text, adapt=!S.adaptedText;
     const data=await api("structure_cv",{offer:o,cvText:src.slice(0,40000),adapt});
     S.cvData=data; await buildThemePdf(); markDone(2);
-    if(S.cv.kind==="pdf"){S.adaptedText=cvDataText(data);updateKw()}
+    if(S.cv.kind!=="docx"){S.adaptedText=cvDataText(data);updateKw()}
+    $("#themes").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"center"});
   }catch(e){fail("#themeMsg",e)}finally{busy(btn,false)}
 };
 function cvDataText(d){return [d.nom,d.titre,d.profil,...(d.experiences||[]).flatMap(e=>[e.poste,e.entreprise,...(e.points||[])]),...(d.formation||[]).map(f=>f.diplome+" "+f.ecole),...(d.competences||[]).flatMap(c=>[c.categorie,...(c.items||[])]),...(d.certifications||[])].join("\n")}
 async function buildThemePdf(){
   try{
+    await ensureFonts();
     const t=THEMES.find(x=>x.id===S.themeId);
     const doc=renderCV(S.cvData,t,S.usePhoto?S.photo:null);
     S.themePdf=doc.output("arraybuffer");
-    $("#dlThemePdf").hidden=false;
+    $("#dlThemePdf").hidden=false; $("#dlThemeDocx").hidden=false;
     const v={"Version thème":el=>renderPdfInto(el,S.themePdf)};
     if(S.adaptedBlob) v["CV adapté"]=el=>renderDocxInto(el,S.adaptedBlob);
-    v["Original"]=S.cv.kind==="docx"?el=>renderDocxInto(el,new Blob([S.cv.buf])):el=>renderPdfInto(el,S.cv.buf);
+    if(S.cv.kind==="docx") v["Original"]=el=>renderDocxInto(el,new Blob([S.cv.buf])); else if(S.cv.kind==="pdf") v["Original"]=el=>renderPdfInto(el,S.cv.buf);
     setViews(v,"Version thème");
   }catch(e){show("#themeMsg","La mise en forme a échoué. Essaie un autre thème.","err")}
 }
+$("#dlThemeDocx").onclick=async()=>{
+  if(!S.cvData)return;
+  try{const t=THEMES.find(x=>x.id===S.themeId);const blob=await cvDocx(S.cvData,t,S.usePhoto?S.photo:null);
+    const n=S.cvData.nom?slug(S.cvData.nom):"CV"; await save(`${n} - CV ${t.name}.docx`,blob); toast("Version Word téléchargée")}
+  catch(e){show("#themeMsg","La version Word n'a pas pu être créée.","err")}
+};
 $("#dlThemePdf").onclick=async()=>{if(!S.themePdf)return;const n=S.cvData&&S.cvData.nom?slug(S.cvData.nom):"CV";await save(`${n} - CV ${THEMES.find(x=>x.id===S.themeId).name}.pdf`,new Blob([S.themePdf]),"#themeMsg")};
 
-/* Moteur de rendu jsPDF (texte réel, polices standard) */
+/* Version Word du CV thème : une colonne, police et couleurs du thème, entièrement modifiable */
+function cvDocx(d,th,photo){
+  const X=v=>String(v??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  const T=v=>clean(v);
+  const ACC=th.accent.replace("#",""), INK=th.ink.replace("#",""), GREY="5E6574", W=9638;
+  const run=(t,o={})=>t?`<w:r><w:rPr>${o.b?"<w:b/>":""}${o.i?"<w:i/>":""}${o.caps?"<w:caps/>":""}<w:color w:val="${o.c||INK}"/>${o.sz?`<w:sz w:val="${Math.round(o.sz*2)}"/><w:szCs w:val="${Math.round(o.sz*2)}"/>`:""}${o.sp?`<w:spacing w:val="${o.sp}"/>`:""}</w:rPr><w:t xml:space="preserve">${X(t)}</w:t></w:r>`:"";
+  const tab='<w:r><w:tab/></w:r>';
+  const para=(runs,o={})=>`<w:p><w:pPr>${o.keep?"<w:keepNext/>":""}${o.border?`<w:pBdr><w:bottom w:val="single" w:sz="8" w:space="3" w:color="${ACC}"/></w:pBdr>`:""}${o.tab?`<w:tabs><w:tab w:val="right" w:pos="${W}"/></w:tabs>`:""}<w:spacing w:before="${o.before||0}" w:after="${o.after??0}" w:line="${o.line||250}" w:lineRule="auto"/>${o.ind?`<w:ind w:left="${o.ind}" w:hanging="${o.hang||0}"/>`:""}</w:pPr>${runs}</w:p>`;
+  const R=Object.assign({profil:"Profil",experiences:"Expérience professionnelle",formation:"Formation",competences:"Compétences",langues:"Langues",certifications:"Certifications",interets:"Centres d'intérêt"},d.rubriques||{});
+  const head=k=>para(run(T(R[k]),{b:true,caps:true,sz:11,c:ACC,sp:10}),{border:true,before:220,after:100,keep:true});
+  const bullet=t=>para(run("•",{c:ACC,sz:10.5})+tab+run(T(t),{sz:10.5}),{ind:300,hang:300,after:40});
+  const contact=[d.contact&&d.contact.email,d.contact&&d.contact.telephone,d.contact&&d.contact.ville,d.contact&&d.contact.linkedin,...((d.contact&&d.contact.autres)||[])].map(T).filter(Boolean).join("  |  ");
+  const top=para(run(T(d.nom),{b:true,sz:24}),{after:40})+para(run(T(d.titre),{sz:13,c:ACC}),{after:60})+para(run(contact,{sz:9.5,c:GREY}),{after:0});
+  const EMU=1008000;
+  const pic=`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${EMU}" cy="${EMU}"/><wp:docPr id="1" name="Photo"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="1" name="photo.jpg"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdPhoto"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${EMU}" cy="${EMU}"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+  const nob='<w:tblBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/><w:insideH w:val="nil"/><w:insideV w:val="nil"/></w:tblBorders>';
+  let body=photo?`<w:tbl><w:tblPr><w:tblW w:w="${W}" w:type="dxa"/>${nob}<w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${W-1900}"/><w:gridCol w:w="1900"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="${W-1900}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>${top}</w:tc><w:tc><w:tcPr><w:tcW w:w="1900" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:jc w:val="right"/></w:pPr>${pic}</w:p></w:tc></w:tr></w:tbl>`:top;
+  if(T(d.profil)) body+=head("profil")+para(run(T(d.profil),{sz:10.5}),{after:40});
+  if((d.experiences||[]).length){body+=head("experiences");d.experiences.forEach(e=>{
+    const dates=T([e.debut,e.fin].filter(Boolean).join(" – "));
+    body+=para(run(T(e.poste),{b:true,sz:11.5})+(dates?tab+run(dates,{sz:9.5,c:GREY}):""),{tab:true,keep:true,before:100});
+    const sub=T([e.entreprise,e.lieu].filter(Boolean).join(" · "));
+    if(sub) body+=para(run(sub,{i:true,sz:10.5,c:ACC}),{after:60,keep:true});
+    (e.points||[]).filter(p=>T(p)).forEach(p=>body+=bullet(p));
+  })}
+  if((d.formation||[]).length){body+=head("formation");d.formation.forEach(f=>{
+    body+=para(run(T(f.diplome),{b:true,sz:11})+(T(f.annee)?tab+run(T(f.annee),{sz:9.5,c:GREY}):""),{tab:true,keep:true,before:80});
+    const sub=T([f.ecole,f.details].filter(Boolean).join(" · ")); if(sub) body+=para(run(sub,{sz:10,c:GREY}),{after:40});
+  })}
+  if((d.competences||[]).length){body+=head("competences");d.competences.forEach(c=>{
+    const items=T((c.items||[]).join(", ")); if(!items&&!T(c.categorie))return;
+    body+=para((T(c.categorie)?run(T(c.categorie)+" : ",{b:true,sz:10.5}):"")+run(items,{sz:10.5}),{after:60});
+  })}
+  if((d.langues||[]).length) body+=head("langues")+para(run(d.langues.map(l=>T([l.langue,l.niveau].filter(Boolean).join(" – "))).filter(Boolean).join("   ·   "),{sz:10.5}),{after:40});
+  const certs=(d.certifications||[]).filter(c=>T(c)); if(certs.length){body+=head("certifications");certs.forEach(c=>body+=bullet(c))}
+  const ints=(d.interets||[]).filter(c=>T(c)); if(ints.length) body+=head("interets")+para(run(ints.map(T).join(", "),{sz:10.5}),{after:40});
+  const zip=new JSZip();
+  zip.file("[Content_Types].xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`);
+  zip.file("_rels/.rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+  zip.file("word/_rels/document.xml.rels",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${photo?'<Relationship Id="rIdPhoto" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/photo.jpeg"/>':""}</Relationships>`);
+  zip.file("word/styles.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="${th.word}" w:hAnsi="${th.word}" w:cs="${th.word}" w:eastAsia="${th.word}"/><w:sz w:val="21"/><w:szCs w:val="21"/><w:lang w:val="fr-CH"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="264" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`);
+  if(photo) zip.file("word/media/photo.jpeg",photo.square.split(",")[1],{base64:true});
+  zip.file("word/document.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="1134" w:bottom="850" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`);
+  return zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",compression:"DEFLATE"});
+}
+
+/* Moteur de rendu jsPDF : vraies polices embarquées (Carlito, Caladea, Poppins), texte sélectionnable */
+const FONT_FILES={Carlito:{normal:"Carlito-Regular.ttf",bold:"Carlito-Bold.ttf",italic:"Carlito-Italic.ttf"},
+  Caladea:{normal:"Caladea-Regular.ttf",bold:"Caladea-Bold.ttf",italic:"Caladea-Italic.ttf"},
+  Poppins:{normal:"Poppins-Regular.ttf",bold:"Poppins-Bold.ttf",italic:"Poppins-Italic.ttf"}};
+const FONT_FALLBACK={Carlito:"helvetica",Caladea:"times",Poppins:"helvetica"};
+let fontData=null, fontsReady=null;
+function ensureFonts(){
+  if(!fontsReady) fontsReady=(async()=>{
+    const out={};
+    await Promise.all(Object.values(FONT_FILES).flatMap(f=>Object.values(f)).map(async file=>{
+      const r=await fetch("fonts/"+file); if(!r.ok) throw new Error("font");
+      const b=new Uint8Array(await r.arrayBuffer()); let bin=""; for(let i=0;i<b.length;i+=0x8000) bin+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));
+      out[file]=btoa(bin);
+    }));
+    fontData=out; return true;
+  })().catch(()=>{fontData=null;return false});
+  return fontsReady;
+}
+function newDoc(){
+  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4",compress:true});
+  if(fontData) for(const [fam,styles] of Object.entries(FONT_FILES)) for(const [st,file] of Object.entries(styles)){doc.addFileToVFS(file,fontData[file]);doc.addFont(file,fam,st)}
+  return doc;
+}
+const famOf=f=>fontData?f:(FONT_FALLBACK[f]||f);
 const WIN=new Set("€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ".split(""));
-function clean(s){return String(s??"").replace(/[‐‑‒]/g,"-").replace(/ | /g," ").split("").filter(c=>{const k=c.charCodeAt(0);return (k>=32&&k<=126)||(k>=160&&k<=255)||WIN.has(c)||c==="\n"}).join("").trim()}
+const OK_RANGES=[[32,126],[160,383],[536,539],[8208,8231],[8240,8240],[8249,8250],[8364,8364],[8482,8482],[8592,8595],[8722,8722]];
+function clean(s){
+  s=String(s??"").replace(/[‐‑‒]/g,"-").replace(/[  ]/g," ").replace(/^[•●▪‣\-*]\s+/gm,"");
+  return s.split("").filter(c=>{const k=c.charCodeAt(0);if(c==="\n")return true;return fontData?OK_RANGES.some(([a,b])=>k>=a&&k<=b):((k>=32&&k<=126)||(k>=160&&k<=255)||WIN.has(c))}).join("").replace(/[ \t]{2,}/g," ").trim();
+}
 function hex(h){h=h.replace("#","");return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]}
 function mix(h,w,t){const a=hex(h),b=hex(w);return a.map((v,i)=>Math.round(v*(1-t)+b[i]*t))}
 function renderCV(d,th,photo){
-  const {jsPDF}=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4",compress:true});
-  const PW=210,PH=297,F=th.font, ACC=hex(th.accent), INK=hex(th.ink), MUTE=[96,104,116];
+  const doc=newDoc();
+  const PW=210,PH=297,F=famOf(th.font), ACC=hex(th.accent), INK=hex(th.ink), MUTE=[96,104,116];
+  const fit=(text,maxW,start,min,style)=>{let sz=start;doc.setFont(F,style||"bold");for(;sz>min;sz-=0.5){doc.setFontSize(sz);if(doc.getTextWidth(text)<=maxW)break}doc.setFontSize(sz);return sz};
+  const measure=(text,size,style,w)=>{text=clean(text);if(!text)return 0;doc.setFont(F,style||"normal");doc.setFontSize(size);return doc.splitTextToSize(text,w).length*lh(size)};
   const R=Object.assign({profil:"Profil",experiences:"Expérience professionnelle",formation:"Formation",competences:"Compétences",langues:"Langues",certifications:"Certifications",interets:"Centres d'intérêt",contact:"Contact"},d.rubriques||{});
   const lh=sz=>sz*0.3528*1.38;
   const sideW=th.layout==="sidebar"?66:0;
@@ -720,7 +822,7 @@ function renderCV(d,th,photo){
   }
   function heading(col,label,o){
     o=o||{}; label=clean(label); if(!label)return;
-    col.ensure(14); col.y+=o.before??4;
+    col.ensure(24); col.y+=o.before??4;
     if(th.layout==="gutter"){doc.setFont(F,"bold");doc.setFontSize(8.2);doc.setTextColor(...ACC);doc.text(label.toUpperCase(),18,col.y,{charSpace:.35});return}
     doc.setFont(F,"bold");doc.setFontSize(o.size||9.6);doc.setTextColor(...(o.color||ACC));
     doc.text(th.layout==="single"?label.toUpperCase():label.toUpperCase(),col.x,col.y,{charSpace:.45});
@@ -729,14 +831,17 @@ function renderCV(d,th,photo){
   }
   function exp(col,e){
     const dates=clean([e.debut,e.fin].filter(Boolean).join(" – "));
-    col.ensure(lh(10.4)+lh(9)+4);
+    // Garde un poste et ses puces sur la même page quand c'est possible
+    const pts=(e.points||[]).filter(p=>clean(p));
+    const need=measure(e.poste,10.4,"bold",col.w-28)+measure([e.entreprise,e.lieu].filter(Boolean).join(" · "),9.2,"normal",col.w)+pts.reduce((a,p)=>a+measure(p,9.3,"normal",col.w-4)+0.6,0)+5;
+    col.ensure(need<(col.bottom-col.top2)*0.6?need:lh(10.4)+lh(9)+4);
     doc.setFont(F,"bold");doc.setFontSize(10.4);doc.setTextColor(...INK);
     const dw=dates?(doc.setFont(F,"normal"),doc.setFontSize(8.8),doc.getTextWidth(dates)+4):0;
     if(dates){doc.setTextColor(...MUTE);doc.text(dates,col.x+col.w,col.y,{align:"right"})}
     txt(col,e.poste,{size:10.4,style:"bold",right:dw});
     const sub=[e.entreprise,e.lieu].filter(Boolean).join(" · ");
     txt(col,sub,{size:9.2,style:F==="times"?"italic":"normal",color:th.layout==="single"?MUTE:ACC,after:1});
-    (e.points||[]).forEach(p=>txt(col,p,{size:9.3,indent:4,bullet:true,after:0.6}));
+    pts.forEach(p=>txt(col,p,{size:9.3,indent:4,bullet:true,after:0.6}));
     col.y+=3.2;
   }
   const C=v=>clean(v);
@@ -746,7 +851,7 @@ function renderCV(d,th,photo){
     doc.setFillColor(...INK);doc.rect(0,0,PW,40,"F");
     const tw=PW-36-(photo?38:0);
     if(photo){doc.addImage(photo.circle,"PNG",PW-18-30,5,30,30);doc.setDrawColor(...ACC);doc.setLineWidth(.7);doc.circle(PW-18-15,20,15,"S")}
-    doc.setFont(F,"bold");doc.setFontSize(23);doc.setTextColor(255,255,255);doc.text(doc.splitTextToSize(C(d.nom),tw)[0]||"",18,17);
+    fit(C(d.nom),tw,23,15);doc.setTextColor(255,255,255);doc.text(C(d.nom),18,17);
     doc.setFont(F,"normal");doc.setFontSize(11);doc.setTextColor(...ACC);doc.text(doc.splitTextToSize(C(d.titre),tw)[0]||"",18,24.5);
     doc.setFontSize(8.6);doc.setTextColor(225,228,234);doc.text(doc.splitTextToSize(contact.join("   |   "),tw).slice(0,2),18,32);
     main=new Col(18,PW-36,52,PH-16);
@@ -760,15 +865,15 @@ function renderCV(d,th,photo){
     const top=Math.max(y,py+ps)+3;doc.setDrawColor(...ACC);doc.setLineWidth(.35);doc.line(20,top,PW-20,top);
     main=new Col(20,PW-40,top+6,PH-16);
   }else if(th.layout==="single"){
-    doc.setFont(F,"bold");doc.setFontSize(24);doc.setTextColor(...INK);doc.text(C(d.nom),PW/2,22,{align:"center"});
-    doc.setFont(F,"italic");doc.setFontSize(12);doc.setTextColor(...ACC);doc.text(C(d.titre),PW/2,29.5,{align:"center"});
+    fit(C(d.nom),PW-40,24,15);doc.setTextColor(...INK);doc.text(C(d.nom),PW/2,22,{align:"center"});
+    doc.setFont(F,"italic");doc.setFontSize(12);doc.setTextColor(...ACC);doc.text(doc.splitTextToSize(C(d.titre),PW-40)[0]||"",PW/2,29.5,{align:"center"});
     doc.setFont(F,"normal");doc.setFontSize(9);doc.setTextColor(...MUTE);
     const cl=doc.splitTextToSize(contact.join("  ·  "),PW-40);doc.text(cl,PW/2,36,{align:"center"});
     main=new Col(20,PW-40,40+cl.length*4,PH-16);
   }else if(th.layout==="gutter"){
     const tw=PW-36-(photo?38:0);
     if(photo){doc.addImage(photo.circle,"PNG",PW-18-30,10,30,30)}
-    doc.setFont(F,"normal");doc.setFontSize(27);doc.setTextColor(...INK);doc.text(doc.splitTextToSize(C(d.nom),tw)[0]||"",18,24);
+    fit(C(d.nom),tw,27,16,"normal");doc.setTextColor(...INK);doc.text(C(d.nom),18,24);
     doc.setFont(F,"bold");doc.setFontSize(10.5);doc.setTextColor(...ACC);doc.text(doc.splitTextToSize(C(d.titre).toUpperCase(),tw-8)[0]||"",18,31.5,{charSpace:.4});
     doc.setFont(F,"normal");doc.setFontSize(8.8);doc.setTextColor(...MUTE);
     const cl=doc.splitTextToSize(contact.join("   "),tw);doc.text(cl,18,38);
@@ -807,6 +912,8 @@ function renderCV(d,th,photo){
     if((d.certifications||[]).filter(Boolean).length){sec("certifications",()=>d.certifications.filter(Boolean).forEach(c=>txt(main,c,{size:9.3,indent:4,bullet:true,after:.6})))}
     if((d.interets||[]).filter(Boolean).length){sec("interets",()=>txt(main,d.interets.filter(Boolean).join(", "),{size:9.3}))}
   }
+  const n=doc.getNumberOfPages();
+  if(n>1) for(let p=1;p<=n;p++){doc.setPage(p);doc.setFont(F,"normal");doc.setFontSize(8);doc.setTextColor(...MUTE);doc.text(`${C(d.nom)}  ${p}/${n}`,PW-14,PH-8,{align:"right"})}
   return doc;
 }
 
@@ -824,7 +931,10 @@ $("#letterBtn").onclick=async()=>{
   const btn=$("#letterBtn"); show("#letterMsg","");
   if(!(await ensureOffer("#letterMsg")))return;
   const cvText=S.adaptedText||(S.cv&&S.cv.text)||"";
-  if(!cvText) show("#letterMsg","Sans CV chargé, la lettre restera générale. Charge ton CV à l'étape 2 pour une lettre précise.","info");
+  if(!cvText&&$("#letterNotes").value.trim().length<40){
+    show("#letterMsg","Pour écrire une vraie lettre, Postula a besoin de ton parcours : ajoute ton CV ou ton profil LinkedIn à l'étape 2, ou décris en quelques phrases ton expérience dans « À mettre en avant ».","err");
+    $("#letterNotes").focus(); return;
+  }
   const o=S.offer.info;
   letterCtl=new AbortController(); $("#letterStop").hidden=false;
   try{need();busy(btn,true,"Rédaction…"); letterText.value="";letterText.placeholder="Rédaction de ta lettre en cours (20 à 40 secondes)…";
@@ -851,9 +961,10 @@ $("#dlLetterDocx").onclick=async()=>{
 };
 $("#dlLetterPdf").onclick=async()=>{
   try{
-    const t=THEMES.find(x=>x.id===S.themeId), {jsPDF}=window.jspdf, doc=new jsPDF({unit:"mm",format:"a4"});
+    await ensureFonts();
+    const t=THEMES.find(x=>x.id===S.themeId), doc=newDoc();
     doc.setFillColor(...hex(t.accent));doc.rect(25,14,18,1.2,"F");
-    doc.setFont(t.font,"normal");doc.setFontSize(10.8);doc.setTextColor(...hex(t.ink));
+    doc.setFont(famOf(t.font),"normal");doc.setFontSize(10.8);doc.setTextColor(...hex(t.ink));
     let y=26; const lhh=10.8*0.3528*1.45;
     clean(letterText.value).split("\n").forEach(par=>{
       const lines=par.trim()?doc.splitTextToSize(par,160):[""];
@@ -1071,4 +1182,20 @@ function refreshHistory(){
 }
 
 go(store.get("step",1));
+
+/* ---------- App installable (PWA) ---------- */
+if("serviceWorker" in navigator&&location.protocol==="https:"){
+  addEventListener("load",()=>navigator.serviceWorker.register("/sw.js").catch(()=>{}));
+}
+const STANDALONE=matchMedia("(display-mode: standalone)").matches||matchMedia("(display-mode: minimal-ui)").matches||navigator.standalone;
+let installEvt=null;
+const showInstall=on=>document.querySelectorAll("[data-install]").forEach(b=>b.hidden=!on);
+addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;showInstall(true)});
+addEventListener("appinstalled",()=>{installEvt=null;showInstall(false);toast("Postula est installée. Retrouve-la sur ton écran d'accueil.")});
+if(IS_IOS&&!STANDALONE)showInstall(true);
+document.querySelectorAll("[data-install]").forEach(b=>b.onclick=async()=>{
+  if(installEvt){installEvt.prompt();const r=await installEvt.userChoice.catch(()=>null);if(r&&r.outcome==="accepted")showInstall(false);installEvt=null;return}
+  if(IS_IOS)toast("Sur iPhone : touche le bouton Partager de Safari, puis « Sur l'écran d'accueil ».",7000);
+  else toast("Dans le menu du navigateur, choisis « Installer l'application » ou « Ajouter à l'écran d'accueil ».",7000);
+});
 })();
