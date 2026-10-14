@@ -93,32 +93,53 @@ const PRICE: Record<Tier, [number, number]> = {
 
 export interface LlmResult { text: string; cost: number }
 
+async function callAnthropic(key: string, body: Record<string, unknown>) {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const raw = await res.text();
+  let data: Record<string, any> = {};
+  try { data = JSON.parse(raw); } catch { /* corps non JSON */ }
+  return { ok: res.ok, status: res.status, raw, data };
+}
+
 export async function llm(opts: {
   tier: Tier; maxTokens: number; system?: string;
   messages: { role: "user" | "assistant"; content: string }[];
 }): Promise<LlmResult> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) throw new AppError("server_not_configured", 500);
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({
-      model: MODEL[opts.tier], max_tokens: opts.maxTokens,
-      ...(opts.system ? { system: opts.system } : {}),
-      messages: opts.messages,
-    }),
-  });
-  if (!res.ok) {
-    console.error("anthropic", res.status, await res.text().catch(() => ""));
-    throw new AppError(res.status === 429 || res.status === 529 ? "ai_busy" : "ai_error", 502);
+  const base: Record<string, unknown> = {
+    model: MODEL[opts.tier], max_tokens: opts.maxTokens,
+    ...(opts.system ? { system: opts.system } : {}),
+    messages: opts.messages,
+  };
+  // Réponses directes : sans réflexion préalable, toute la limite de jetons sert au texte
+  let r = await callAnthropic(key, { ...base, thinking: { type: "disabled" } });
+  if (!r.ok && r.status === 400 && /thinking/i.test(r.raw)) r = await callAnthropic(key, base);
+  if (!r.ok) {
+    console.error("anthropic", r.status, r.raw.slice(0, 600));
+    throw new AppError(r.status === 429 || r.status === 529 ? "ai_busy" : "ai_error", 502);
   }
-  const data = await res.json();
-  const text = (data.content ?? []).filter((c: { type: string }) => c.type === "text")
-    .map((c: { text: string }) => c.text).join("").trim();
   const [pin, pout] = PRICE[opts.tier];
-  const u = data.usage ?? {};
-  const cost = ((u.input_tokens ?? 0) * pin + (u.output_tokens ?? 0) * pout) / 1e6;
-  if (!text) throw new AppError("ai_empty", 502);
+  let cost = 0;
+  const read = (d: Record<string, any>) => {
+    const u = d.usage ?? {};
+    cost += ((u.input_tokens ?? 0) * pin + (u.output_tokens ?? 0) * pout) / 1e6;
+    return (d.content ?? []).filter((c: { type: string }) => c.type === "text")
+      .map((c: { text: string }) => c.text).join("").trim();
+  };
+  let text = read(r.data);
+  if (!text) {
+    // Réponse vide (limite atteinte pendant la réflexion, ou refus) : un seul nouvel essai, avec plus de marge
+    console.error("anthropic_empty", r.data.stop_reason, JSON.stringify((r.data.content ?? []).map((c: { type: string }) => c.type)));
+    if (r.data.stop_reason === "refusal") throw new AppError("ai_refused", 422);
+    const retry = await callAnthropic(key, { ...base, max_tokens: Math.max(opts.maxTokens * 3, 1500), thinking: { type: "disabled" } });
+    if (retry.ok) text = read(retry.data);
+    if (!text) throw new AppError("ai_empty", 502);
+  }
   return { text, cost };
 }
 

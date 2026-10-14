@@ -65,6 +65,7 @@ function errMsg(e){
     case "too_large":return "Le document est trop long. Utilise un CV de 5 pages maximum et une annonce plus courte.";
     case "offer_too_short":return "Colle le texte complet de l'annonce (au moins quelques lignes).";
     case "not_an_offer":return "Ce texte ne ressemble pas à une offre d'emploi. Colle le texte de l'annonce.";
+    case "ai_refused":return "Cette demande n'a pas pu être traitée. Reformule ta réponse et renvoie-la.";
     case "ai_busy":return "Le service est très sollicité. Réessaie dans une minute (rien n'a été décompté).";
     case "ai_invalid_json":case "ai_error":case "ai_empty":return "La génération a échoué. Relance l'opération (rien n'a été décompté).";
     case "network":return "Connexion impossible. Vérifie ta connexion internet.";
@@ -207,7 +208,7 @@ function go(n,scroll){
   const ol=$("nav.steps ol"); if(ol) ol.style.setProperty("--p",(n-1)/3);
   if(scroll){const top=$("#app").getBoundingClientRect().top+scrollY-70; if(scrollY>top) scrollTo({top,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})}
   $$("nav.steps button").forEach(b=>{if(b.dataset.go===String(n))b.setAttribute("aria-current","step");else b.removeAttribute("aria-current")});
-  if(n===4) refreshHistory();
+  if(n===4) refreshHistory(); else if("speechSynthesis" in window&&IV&&IV.state==="speaking"){try{speechSynthesis.cancel()}catch(e){}}
   store.set("step",n);
 }
 $$("nav.steps button").forEach(b=>b.onclick=()=>go(+b.dataset.go,true));
@@ -827,12 +828,12 @@ function speak(text){
     IV.lastSpoken=text;
     if(IV.muted||!("speechSynthesis" in window)){setTimeout(res,Math.min(6000,600+text.length*25));return}
     try{
-      speechSynthesis.cancel();
+      if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
       const u=new SpeechSynthesisUtterance(text);
       const v=voices.find(x=>x.name===$("#ivVoice").value); if(v)u.voice=v;
       u.lang=v?v.lang:({fr:"fr-CH",en:"en-GB",de:"de-CH",it:"it-CH"}[IV.lang]); u.rate=1.03;
       let done=false; const fin=()=>{if(!done){done=true;res()}};
-      u.onend=fin;u.onerror=fin; setTimeout(fin,30000+text.length*90);
+      u.onend=fin;u.onerror=fin; setTimeout(fin,6000+text.length*85);
       speechSynthesis.speak(u);
     }catch(e){res()}
   });
@@ -860,7 +861,8 @@ $("#micBtn").onclick=()=>recOn?stopRec():startRec();
 /* Chrono : tourne seulement quand le recruteur parle ou que le candidat répond */
 function tick(){
   const now=performance.now(), dt=(now-IV.last)/1000; IV.last=now;
-  if(IV.state==="speaking"||IV.state==="answering") IV.remaining=Math.max(0,IV.remaining-dt);
+  const visible=!$('section[data-step="4"]').hidden&&!document.hidden;
+  if(visible&&(IV.state==="speaking"||IV.state==="answering")) IV.remaining=Math.max(0,IV.remaining-dt);
   const r=Math.ceil(IV.remaining), m=Math.floor(r/60), s=String(r%60).padStart(2,"0");
   $("#clock").textContent=`${m}:${s}`; $("#clock").classList.toggle("low",r<=30);
   $("#clockBar").style.width=(IV.remaining/DURATION*100)+"%";
@@ -908,14 +910,21 @@ async function sendAnswer(){
 $("#sendBtn").onclick=sendAnswer;
 $("#answerBox").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAnswer()}});
 $("#muteBtn").onclick=()=>{IV.muted=!IV.muted;$("#muteBtn").textContent=IV.muted?"Activer le son":"Couper le son";if(IV.muted&&"speechSynthesis" in window)speechSynthesis.cancel()};
-$("#replayBtn").onclick=()=>{if(IV.lastSpoken&&!IV.muted&&IV.state==="answering"){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(IV.lastSpoken);const v=voices.find(x=>x.name===$("#ivVoice").value);if(v)u.voice=v;speechSynthesis.speak(u)}catch(e){}}};
+$("#replayBtn").onclick=()=>{unlockSpeech();if(IV.lastSpoken&&!IV.muted&&IV.state==="answering"){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(IV.lastSpoken);const v=voices.find(x=>x.name===$("#ivVoice").value);if(v)u.voice=v;speechSynthesis.speak(u)}catch(e){}}};
 $("#ivEnd").onclick=()=>endInterview(true);
 
 async function askQuestion(text){
   const q=text.trim(); IV.turns.push({role:"assistant",content:q}); IV.asked.push(q.slice(0,180));
   bubble("r",q); setState("speaking"); await speak(q);
 }
+const IS_IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+function unlockSpeech(){
+  // Safari (iPhone, iPad) n'autorise la voix que si la première phrase est lancée pendant un toucher
+  if(!("speechSynthesis" in window)||IV.unlocked)return;
+  try{const u=new SpeechSynthesisUtterance(" ");u.volume=0;u.rate=2;speechSynthesis.speak(u);IV.unlocked=true}catch(e){}
+}
 $("#ivStart").onclick=async()=>{
+  unlockSpeech();
   const btn=$("#ivStart"); show("#ivMsg","");
   busy(btn,true,"Préparation…");
   try{
@@ -929,6 +938,7 @@ $("#ivStart").onclick=async()=>{
     $("#avatar").textContent=IV.persona[0].split(" ").map(w=>w[0]).join("");
     $("#transcript").innerHTML=""; $("#ivSetup").hidden=true; $("#ivResult").hidden=true; $("#ivRoom").hidden=false;
     if(SR) micAvail(true,"Appuie sur le micro pour répondre à voix haute, ou écris ta réponse.");
+    if(IS_IOS) toast("Tu n'entends rien ? Désactive le mode silencieux de ton iPhone et monte le volume.");
     clearInterval(IV.timer); IV.timer=setInterval(tick,250); tick();
     await askQuestion(r.text); if(IV.ended)return;
     setState("answering");

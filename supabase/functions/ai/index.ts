@@ -212,7 +212,7 @@ Exigences : ${o.exigences.join(" ; ")}
 CV DU CANDIDAT :
 ${cvText || "(non fourni : base-toi sur l'offre)"}`;
   return metered(db, uid, "interview", ip, { context, lang }, async (res) => {
-    const r = await llm({ tier: "quick", maxTokens: 300, system: context,
+    const r = await llm({ tier: "quick", maxTokens: 600, system: context,
       messages: [{ role: "user", content: "Commence maintenant : salue en une phrase, présente-toi, puis pose ta première question." }] });
     return { value: { sessionId: res.session_id, persona: { name: persona[0], role: persona[1] }, text: r.text }, cost: r.cost };
   });
@@ -227,7 +227,7 @@ async function interviewTurn(db: SupabaseClient, uid: string, ip: string | null,
   }));
   if (history[history.length - 1].role !== "user") throw new AppError("bad_request", 400, { field: "history" });
   return metered(db, uid, "turn", ip, { session }, async (res) => {
-    const r = await llm({ tier: "quick", maxTokens: 300, system: res.context,
+    const r = await llm({ tier: "quick", maxTokens: 600, system: res.context,
       messages: [{ role: "user", content: "Commence maintenant : salue en une phrase, présente-toi, puis pose ta première question." }, ...history] });
     return { value: { text: r.text }, cost: r.cost };
   });
