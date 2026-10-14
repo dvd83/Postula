@@ -70,6 +70,8 @@ Deno.serve(async (req) => {
         ? { subscription_data: { metadata: meta } }
         : { payment_intent_data: { metadata: meta } }),
       allow_promotion_codes: true,
+      // Paiement Stripe classique (le texte de renonciation au droit de rétractation est incompatible avec Managed Payments)
+      managed_payments: { enabled: false },
       locale: "fr",
       success_url: `${SITE}/?paiement=ok&offre=${product}`,
       cancel_url: `${SITE}/?paiement=annule`,
