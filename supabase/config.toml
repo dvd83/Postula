@@ -1,0 +1,8 @@
+# Configuration Supabase CLI (utilisée par la CI pour déployer migrations et fonctions)
+project_id = "gnnslezorkjlpprmroiv"
+
+[functions.ai]
+verify_jwt = true
+
+[functions.claim-free]
+verify_jwt = true

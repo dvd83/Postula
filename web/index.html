@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Postula</title>
+<meta name="description" content="Adapte ton CV et ta lettre à chaque offre d'emploi, puis entraîne-toi avec un entretien vocal de 5 minutes noté.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230E7A68'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='800' font-size='20' text-anchor='middle' fill='white'%3EP%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Postula<span>.</span></h1>
+      <p>Une offre, ton CV, ta lettre, et un entretien d'entraînement chronométré.</p>
+    </div>
+    <div class="account" id="account" hidden>
+      <div class="acc-line"><span class="pill ok" id="accPlan">Découverte</span><span class="acc-quota" id="accQuota"></span></div>
+      <div class="acc-line"><span class="acc-email" id="accEmail"></span><button class="btn ghost sm" data-open-plans>Offres</button><button class="btn ghost sm" id="logoutBtn">Se déconnecter</button></div>
+    </div>
+  </header>
+  <section id="authScreen" class="auth">
+    <div class="auth-copy">
+      <h2>Ton CV adapté à chaque offre, puis l'entretien avant le vrai.</h2>
+      <ul class="clean">
+        <li>CV réécrit pour l'offre, mise en page Word conservée</li>
+        <li>Lettre de motivation sur mesure</li>
+        <li>Entretien vocal de 5 minutes, noté sur 10 avec un retour précis</li>
+      </ul>
+      <p class="lede">Offre Découverte gratuite : 1 CV adapté, 1 lettre et 1 entretien noté, sans carte bancaire.</p>
+    </div>
+    <div class="card stack auth-box">
+      <h3>Connexion</h3>
+      <button class="btn oauth" id="loginGoogle"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.5 5.5 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9h-4v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.7V6.6h-4a12 12 0 0 0 0 10.9l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4A12 12 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8z"/></svg>Continuer avec Google</button>
+      <button class="btn oauth" id="loginApple"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.7c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.5-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.3.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.2.1 2.3-.6 3.1-1.5z"/></svg>Continuer avec Apple</button>
+      <div id="authMsg"></div>
+      <p class="hint">En continuant, tu acceptes les conditions d'utilisation et la politique de confidentialité. Tes CV restent dans ton navigateur et ne sont envoyés au serveur que le temps de la génération.</p>
+    </div>
+  </section>
+
+  <div id="app" hidden>
+    <section class="card stack claim" id="claimCard" hidden>
+      <div><h2>Active ton offre Découverte</h2><p class="lede">Une vérification rapide pour éviter les abus : l'offre gratuite est valable une fois par personne et par appareil.</p></div>
+      <div id="turnstileBox"></div>
+      <div id="claimMsg"></div>
+    </section>
+
+    <section class="card stack" id="plansDialog" hidden>
+      <div class="row" style="justify-content:space-between"><h2>Les offres</h2><button class="btn ghost" id="closePlans">Fermer</button></div>
+      <div class="plans">
+        <div class="plan"><h3>Mensuel</h3><div class="price">14.90<small> CHF / mois</small></div><ul class="clean"><li>50 CV adaptés et 50 lettres par mois</li><li>20 entretiens notés par mois</li><li>Résiliable en un clic</li></ul><button class="btn" data-buy="monthly">Choisir</button></div>
+        <div class="plan best"><span class="pill ex">Le plus choisi</span><h3>Pass Recherche 3 mois</h3><div class="price">34.90<small> CHF une fois</small></div><ul class="clean"><li>150 CV adaptés et 150 lettres</li><li>60 entretiens notés</li><li>Sans renouvellement automatique</li></ul><button class="btn primary" data-buy="pass3m">Choisir</button></div>
+        <div class="plan"><h3>Recharge</h3><div class="price">5.90<small> CHF</small></div><ul class="clean"><li>+10 entretiens</li><li>Valables jusqu'à la fin de ton abonnement</li></ul><button class="btn" data-buy="topup">Ajouter</button></div>
+      </div>
+      <div id="plansMsg"></div>
+    </section>
+
+
+  <nav class="steps" aria-label="Étapes">
+    <button data-go="1" aria-current="step"><span class="n">1</span><span class="t"><b>Offre</b><small>Lien ou texte du poste</small></span></button>
+    <button data-go="2"><span class="n">2</span><span class="t"><b>CV</b><small>Adapté, mise en page gardée</small></span></button>
+    <button data-go="3"><span class="n">3</span><span class="t"><b>Lettre</b><small>Motivation sur mesure</small></span></button>
+    <button data-go="4"><span class="n">4</span><span class="t"><b>Entretien</b><small>5 min, noté</small></span></button>
+  </nav>
+
+  <!-- ÉTAPE 1 -->
+  <section data-step="1">
+    <div class="grid">
+      <div class="card stack">
+        <div><h2>L'offre d'emploi</h2><p class="lede">Colle le lien, puis le texte de l'annonce. Tout le reste (CV, lettre, entretien) s'appuie dessus.</p></div>
+        <div>
+          <label for="offerUrl">Lien de l'annonce</label>
+          <input id="offerUrl" type="url" placeholder="https://www.linkedin.com/jobs/view/…">
+          <div class="hint" id="urlHint">LinkedIn exige une connexion : la page ne peut pas être lue automatiquement. Ouvre l'annonce, sélectionne tout le texte (Ctrl/Cmd + A) et colle-le ci-dessous.</div>
+        </div>
+        <div>
+          <div class="row" style="justify-content:space-between"><label for="offerText" style="margin:0">Texte de l'annonce</label><span class="pill ex" id="exBadge">Exemple</span></div>
+          <textarea id="offerText" rows="12" style="margin-top:6px"></textarea>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="analyzeBtn">Analyser l'offre</button>
+          <button class="btn ghost" id="clearOffer">Vider</button>
+        </div>
+        <div id="offerMsg"></div>
+      </div>
+      <div class="card stack" id="offerCard">
+        <h3>Ce que le recruteur cherche</h3>
+        <p class="lede" id="offerEmpty">L'analyse fait ressortir le poste, les exigences et les mots-clés que les logiciels de tri (ATS) vont chercher dans ton CV.</p>
+        <div id="offerOut" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ÉTAPE 2 -->
+  <section data-step="2" hidden>
+    <div class="grid">
+      <div class="stack">
+        <div class="card stack">
+          <div><h2>Ton CV</h2><p class="lede">Word (.docx) : seul le texte change, ta mise en page reste identique au pixel près. PDF : le contenu est adapté puis remis en forme avec un thème.</p></div>
+          <label class="drop" id="drop" for="cvFile">
+            <input id="cvFile" type="file" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+            <b id="dropTitle">Dépose ton CV ici</b>
+            <span class="hint" id="dropSub">ou clique pour choisir un fichier .docx ou .pdf</span>
+          </label>
+          <div id="cvMsg"></div>
+          <div class="row">
+            <button class="btn primary" id="adaptBtn" disabled>Adapter à l'offre</button>
+            <button class="btn" id="dlDocx" hidden>Télécharger le .docx</button>
+          </div>
+          <div id="kwBox" hidden>
+            <label>Mots-clés de l'offre présents dans le CV</label>
+            <div class="row" style="margin-bottom:8px"><span class="pill" id="kwBefore"></span><span aria-hidden="true">→</span><span class="pill ok" id="kwAfter"></span></div>
+            <div class="chips" id="kwChips"></div>
+          </div>
+        </div>
+        <div class="card stack" id="changesCard" hidden>
+          <div class="row" style="justify-content:space-between"><h3>Modifications proposées</h3><span class="pill" id="chgCount"></span></div>
+          <p class="lede" id="chgSummary"></p>
+          <div class="changes" id="changes"></div>
+          <p class="hint">Décoche une modification pour garder ton texte d'origine. L'aperçu se met à jour.</p>
+        </div>
+        <div class="card stack">
+          <div><h3>Changer de look</h3><p class="lede">Remet ton CV adapté en forme dans un thème. Le PDF garde un vrai texte sélectionnable, lisible par les ATS.</p></div>
+          <div class="themes" id="themes"></div>
+          <div class="photo" id="photoRow" hidden>
+            <div class="ph" id="photoThumb">Photo</div>
+            <div class="txt">
+              <label for="usePhoto"><input type="checkbox" id="usePhoto" checked> Inclure ma photo</label>
+              <span class="hint" id="photoHint" style="margin:0"></span>
+            </div>
+            <label class="btn ghost" for="photoFile" id="photoBtnLabel">Changer la photo</label>
+            <input type="file" id="photoFile" accept="image/jpeg,image/png,image/webp" hidden>
+          </div>
+          <div class="row">
+            <button class="btn" id="themeBtn" disabled>Générer la version thème</button>
+            <button class="btn" id="dlThemePdf" hidden>Télécharger le PDF</button>
+          </div>
+          <div id="themeMsg"></div>
+        </div>
+      </div>
+      <div class="card stack">
+        <div class="vtabs" id="vtabs"></div>
+        <div class="viewer" id="viewer"><div class="empty">L'aperçu de ton CV s'affichera ici.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ÉTAPE 3 -->
+  <section data-step="3" hidden>
+    <div class="grid">
+      <div class="card stack">
+        <div><h2>Lettre de motivation</h2><p class="lede">Écrite à partir de l'offre et de ton CV adapté. Rien n'est inventé : si un point manque dans ton CV, ajoute-le dans « À mettre en avant ».</p></div>
+        <div>
+          <label>Ton</label>
+          <div class="seg" id="toneSeg">
+            <button aria-pressed="true" data-v="formel">Formel</button>
+            <button aria-pressed="false" data-v="chaleureux">Chaleureux</button>
+            <button aria-pressed="false" data-v="direct">Direct</button>
+          </div>
+        </div>
+        <div>
+          <label>Longueur</label>
+          <div class="seg" id="lenSeg">
+            <button aria-pressed="false" data-v="courte">Courte</button>
+            <button aria-pressed="true" data-v="standard">Standard</button>
+            <button aria-pressed="false" data-v="détaillée">Détaillée</button>
+          </div>
+        </div>
+        <div>
+          <label for="letterNotes">À mettre en avant (facultatif)</label>
+          <textarea id="letterNotes" rows="4" placeholder="Ex. : je connais déjà l'entreprise comme client, disponible dès janvier, mobilité Genève–Lausanne…"></textarea>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="letterBtn">Rédiger la lettre</button>
+          <button class="btn ghost" id="letterStop" hidden>Arrêter</button>
+        </div>
+        <div id="letterMsg"></div>
+      </div>
+      <div class="card stack">
+        <div class="row" style="justify-content:space-between"><h3>Ta lettre</h3><span class="hint" style="margin:0">Modifiable directement</span></div>
+        <textarea id="letterText" rows="22" placeholder="La lettre apparaîtra ici pendant sa rédaction."></textarea>
+        <div class="row">
+          <button class="btn" id="dlLetterDocx" disabled>Télécharger en .docx</button>
+          <button class="btn" id="dlLetterPdf" disabled>Télécharger en PDF</button>
+          <button class="btn ghost" id="copyLetter" disabled>Copier</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ÉTAPE 4 -->
+  <section data-step="4" hidden>
+    <div id="ivSetup" class="grid">
+      <div class="card stack">
+        <div><h2>Entretien d'entraînement</h2><p class="lede">Un recruteur virtuel te pose des questions tirées de l'offre et de ton CV pendant 5 minutes. À la fin : une note sur 10, ce qui a marché, et quoi travailler. Chaque nouvelle tentative pose des questions différentes.</p></div>
+        <div class="row">
+          <div style="flex:1 1 160px"><label for="ivLang">Langue de l'entretien</label>
+            <select id="ivLang"><option value="fr">Français</option><option value="en">English</option><option value="de">Deutsch</option><option value="it">Italiano</option></select></div>
+          <div style="flex:1 1 160px"><label for="ivStyle">Style du recruteur</label>
+            <select id="ivStyle"><option value="hasard">Au hasard</option><option value="bienveillant">Bienveillant</option><option value="exigeant">Exigeant</option><option value="pressé">Pressé, va droit au but</option></select></div>
+        </div>
+        <div><label for="ivVoice">Voix du recruteur</label><select id="ivVoice"></select><div class="hint" id="voiceHint"></div></div>
+        <div class="msg info" style="font-size:13px">Le chrono tourne pendant que le recruteur parle et pendant que tu réponds. Il se met en pause quand le recruteur prépare sa question.</div>
+        <div class="row"><button class="btn primary" id="ivStart">Commencer l'entretien</button></div>
+        <div id="ivMsg"></div>
+      </div>
+      <div class="card stack">
+        <h3>Tes tentatives</h3>
+        <div id="histEmpty" class="lede">Aucune tentative pour cette offre. Ta note et ta progression apparaîtront ici.</div>
+        <div class="hist" id="histBars" hidden></div>
+        <div id="lastEval" hidden></div>
+      </div>
+    </div>
+
+    <div id="ivRoom" class="room" hidden>
+      <div class="card recruiter">
+        <div class="avatar" id="avatar">CM</div>
+        <div class="who"><b id="rName">Claire Morel</b><small id="rRole">Responsable RH</small></div>
+        <div class="clock" id="clock" aria-live="off">5:00</div>
+        <div class="bar"><i id="clockBar"></i></div>
+        <div class="state" id="ivState" aria-live="polite"></div>
+        <div class="row" style="justify-content:center">
+          <button class="btn" id="muteBtn">Couper le son</button>
+          <button class="btn" id="replayBtn">Réécouter</button>
+          <button class="btn ghost" id="ivEnd">Terminer</button>
+        </div>
+      </div>
+      <div class="card stack">
+        <div class="transcript" id="transcript" aria-live="polite"></div>
+        <div>
+          <div class="answer">
+            <button class="mic" id="micBtn" aria-label="Répondre à voix haute" title="Répondre à voix haute">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+            </button>
+            <textarea id="answerBox" placeholder="Ta réponse… (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)"></textarea>
+            <button class="btn primary" id="sendBtn">Envoyer</button>
+          </div>
+          <div class="hint" id="micHint"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ivResult" hidden></div>
+  </section>
+
+    </div>
+<footer class="note">Postula est un outil d'entraînement. Tes fichiers restent dans ton navigateur et ne sont envoyés au serveur que le temps de la génération, sans être conservés. Relis toujours ton CV et ta lettre avant de les envoyer.</footer>
+</div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3.4.2/dist/fp.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.0/dist/docx-preview.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
