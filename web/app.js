@@ -68,6 +68,10 @@ function errMsg(e){
     case "ai_refused":return "Cette demande n'a pas pu être traitée. Reformule ta réponse et renvoie-la.";
     case "ai_busy":return "Le service est très sollicité. Réessaie dans une minute (rien n'a été décompté).";
     case "ai_invalid_json":case "ai_error":case "ai_empty":return "La génération a échoué. Relance l'opération (rien n'a été décompté).";
+    case "fetch_blocked":return "Ce site ne permet pas de lire ses annonces automatiquement. Ouvre l'annonce, copie sa description et colle-la dans le cadre « Texte de l'annonce ».";
+    case "fetch_failed":return "Impossible d'ouvrir ce lien (site indisponible ou annonce retirée). Copie la description de l'annonce et colle-la ci-dessous.";
+    case "fetch_empty":return "La page ne contient pas le texte de l'annonce (site qui demande une connexion ou une page interactive). Copie la description et colle-la ci-dessous.";
+    case "fetch_bad_url":return "Ce lien n'est pas valide. Vérifie qu'il commence par https://";
     case "network":return "Connexion impossible. Vérifie ta connexion internet.";
     default:return "Le service n'a pas répondu. Relance l'opération.";
   }
@@ -235,22 +239,46 @@ offerText.value=store.get("offerText",EXAMPLE); offerUrl.value=store.get("offerU
 function syncExample(){$("#exBadge").hidden=offerText.value.trim()!==EXAMPLE.trim()}
 syncExample();
 offerText.addEventListener("input",()=>{store.set("offerText",offerText.value);syncExample()});
-offerUrl.addEventListener("input",()=>{store.set("offerUrl",offerUrl.value);
+offerUrl.addEventListener("input",e=>{store.set("offerUrl",offerUrl.value);
   // Nouveau lien : l'exemple prérempli ou l'annonce précédente ne doivent pas être analysés à sa place
   if(offerUrl.value.trim()){
     if(offerText.value.trim()===EXAMPLE.trim()){offerText.value="";store.set("offerText","");syncExample()}
-    else if(offerText.value.trim()&&S.offer.info&&S.offer.info._src===offerText.value.trim().slice(0,400))
-      show("#offerMsg","Le texte ci-dessous est celui de ton annonce précédente. Remplace-le par le texte de la nouvelle annonce.","info");
+    else if(offerText.value.trim()&&S.offer.info&&S.offer.info._src===offerText.value.trim().slice(0,400)){offerText.value="";store.set("offerText","");syncExample()}
   }
-  const li=/linkedin\./i.test(offerUrl.value);
-  urlHint();});
+  urlHint();
+  clearTimeout(linkTimer);
+  if(e.inputType==="insertFromPaste"||e.inputType==="insertReplacementText"||e.inputType==="insertFromDrop") linkTimer=setTimeout(()=>readLink(),300);
+});
+offerUrl.addEventListener("change",()=>{clearTimeout(linkTimer);readLink()});
+offerUrl.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();clearTimeout(linkTimer);readLink()}});
+let linkTimer=null, linkCtl=null, lastLink=store.get("lastLink","");
+const isLink=u=>/^https?:\/\/[^\s/]+\.[^\s]{2,}/i.test(u);
+/* Lit l'annonce directement depuis son lien (pages publiques ; LinkedIn exclu), puis lance l'analyse */
+async function readLink(force){
+  const u=offerUrl.value.trim();
+  if(!isLink(u)||(!force&&u===lastLink))return false;
+  if(/linkedin\./i.test(u)){show("#offerMsg","LinkedIn ne laisse pas lire ses annonces automatiquement : ouvre l'annonce, copie sa description et colle-la ci-dessous.","info");return false}
+  if(!session)return false;
+  if(linkCtl)linkCtl.abort(); linkCtl=new AbortController();
+  const btn=$("#analyzeBtn"); let r=null;
+  show("#offerMsg",""); busy(btn,true,"Lecture de l'annonce…");
+  try{ r=await api("fetch_offer",{url:u},{signal:linkCtl.signal}); }
+  catch(e){ if(e&&e.code!=="cancelled"){fail("#offerMsg",e);offerText.focus()} }
+  finally{ busy(btn,false); }
+  if(!r||offerUrl.value.trim()!==u)return false;
+  lastLink=u; store.set("lastLink",u);
+  offerText.value=r.text; store.set("offerText",r.text); syncExample();
+  toast("Annonce récupérée sur "+r.host);
+  await $("#analyzeBtn").onclick();
+  return true;
+}
 const TOUCH=matchMedia("(pointer: coarse)").matches;
 function urlHint(){
   const li=/linkedin\./i.test(offerUrl.value);
   const how=TOUCH
     ?"Ouvre l'annonce, appuie sur « Afficher plus », puis garde le doigt appuyé sur la description pour la sélectionner et la copier."
     :"Ouvre l'annonce, sélectionne la description (Ctrl/Cmd + A sélectionne toute la page) et copie-la.";
-  $("#urlHint").textContent=(li?"LinkedIn ne laisse pas lire ses annonces automatiquement : colle aussi le texte ci-dessous. ":"Le lien sert de référence : colle aussi le texte de l'annonce ci-dessous. ")+how;
+  $("#urlHint").textContent=li?"LinkedIn ne laisse pas lire ses annonces automatiquement : colle aussi le texte ci-dessous. "+how:"On lit l'annonce automatiquement sur la plupart des sites (jobup.ch, jobs.ch, sites carrière…). Pour LinkedIn, ou si ça ne marche pas, colle le texte ci-dessous.";
 }
 urlHint();
 $("#clearOffer").onclick=()=>{offerText.value="";offerUrl.value="";store.set("offerText","");store.set("offerUrl","");syncExample();offerText.focus()};
@@ -265,8 +293,9 @@ pasteBtn.onclick=async()=>{
   catch(e){ offerText.focus(); show("#offerMsg",TOUCH?"Ton navigateur n'a pas autorisé la lecture du presse-papiers. Appuie longuement dans le cadre ci-dessous, puis sur « Coller ».":"Ton navigateur n'a pas autorisé la lecture du presse-papiers. Clique dans le cadre ci-dessous, puis Ctrl/Cmd + V.","info"); return; }
   if(!t){ show("#offerMsg","Le presse-papiers est vide. Copie d'abord la description de l'annonce.","info"); return; }
   if(/^https?:\/\/\S+$/.test(t)){
-    offerUrl.value=t; offerUrl.dispatchEvent(new Event("input"));
-    show("#offerMsg","Lien ajouté. Copie maintenant la description de l'annonce, puis appuie à nouveau sur « Coller l'annonce ».","info"); return;
+    offerUrl.value=t; offerUrl.dispatchEvent(new Event("input")); clearTimeout(linkTimer);
+    if(/linkedin\./i.test(t)){show("#offerMsg","Lien ajouté. LinkedIn ne laisse pas lire ses annonces : copie maintenant la description, puis appuie à nouveau sur « Coller l'annonce ».","info");return}
+    await readLink(true); return;
   }
   offerText.value=t.slice(0,15000); store.set("offerText",offerText.value); syncExample();
   if(t.length>=80) $("#analyzeBtn").onclick();
@@ -279,6 +308,7 @@ if(savedInfo&&savedInfo._src===offerText.value.trim().slice(0,400)){S.offer.info
 $("#analyzeBtn").onclick=async()=>{
   const btn=$("#analyzeBtn"); show("#offerMsg","");
   const text=offerText.value.trim();
+  if(text.length<80&&isLink(offerUrl.value.trim())&&!/linkedin\./i.test(offerUrl.value)){await readLink(true);return}
   if(text.length<80){
     show("#offerMsg",offerUrl.value.trim()&&!text
       ?"Le lien seul ne suffit pas : colle aussi le texte de l'annonce dans le cadre « Texte de l'annonce »."

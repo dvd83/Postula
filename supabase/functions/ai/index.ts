@@ -5,6 +5,7 @@ import {
   type Tier,
 } from "../_shared/common.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
+import { fetchOffer } from "../_shared/fetch_offer.ts";
 
 type Kind = "analyze" | "cv" | "letter" | "interview" | "turn" | "eval";
 const LANGS = ["fr", "en", "de", "it"] as const;
@@ -262,7 +263,19 @@ ${transcript}`);
   });
 }
 
+/* Lecture d'une annonce publique depuis son lien (sans IA, donc non décomptée, mais limitée en fréquence) */
+const fetchHits = new Map<string, number[]>();
+async function fetchOfferAction(_db: SupabaseClient, uid: string, _ip: string | null, b: Record<string, unknown>) {
+  const url = str(b.url, 1000, "url");
+  const now = Date.now();
+  const hits = (fetchHits.get(uid) ?? []).filter((t) => now - t < 60_000);
+  if (hits.length >= 10) throw new AppError("rate_limited", 429);
+  hits.push(now); fetchHits.set(uid, hits);
+  return await fetchOffer(url);
+}
+
 const ACTIONS: Record<string, (db: SupabaseClient, uid: string, ip: string | null, b: Record<string, unknown>) => Promise<unknown>> = {
+  fetch_offer: fetchOfferAction,
   analyze_offer: analyzeOffer,
   adapt_cv: adaptCv,
   structure_cv: structureCv,
