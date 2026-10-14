@@ -147,7 +147,7 @@
           <div class="hint" id="urlHint"></div>
         </div>
         <div>
-          <div class="row" style="justify-content:space-between"><label for="offerText" style="margin:0">Texte de l'annonce</label><span class="pill ex" id="exBadge">Exemple</span></div>
+          <div class="row" style="justify-content:space-between"><label for="offerText" style="margin:0">Texte de l'annonce</label><span class="row" style="gap:8px"><span class="pill ex" id="exBadge">Exemple</span><button class="btn sm" id="pasteBtn" type="button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg>Coller l'annonce</button></span></div>
           <textarea id="offerText" rows="12" style="margin-top:6px" placeholder="Colle ici la description complète du poste : missions, profil recherché, conditions…"></textarea>
         </div>
         <div class="row">
@@ -176,6 +176,7 @@
             <b id="dropTitle">Dépose ton CV ici</b>
             <span class="hint" id="dropSub">ou clique pour choisir un fichier .docx ou .pdf</span>
           </label>
+          <div class="row cv-saved" id="cvSaved" hidden><span class="hint" style="margin:0">CV gardé sur cet appareil pour tes prochaines candidatures.</span><button class="btn ghost sm" id="forgetCv" type="button">Oublier ce CV</button></div>
           <div id="cvMsg"></div>
           <div class="row">
             <button class="btn primary" id="adaptBtn" disabled>Adapter à l'offre</button>
@@ -326,14 +327,14 @@
 </footer>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js" defer></script>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
-<script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3.4.2/dist/fp.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.0/dist/docx-preview.min.js"></script>
-<script src="app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3.4.2/dist/fp.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/docx-preview@0.3.0/dist/docx-preview.min.js" defer></script>
+<script src="app.js" defer></script>
 </body>
 </html>

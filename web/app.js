@@ -100,7 +100,7 @@ function renderAuth(){
   if(inApp){
     const email=session.user.email||"", name=(session.user.user_metadata&&session.user.user_metadata.full_name)||email;
     $("#accEmail").textContent=email; $("#accInitial").textContent=(name.trim()[0]||"·").toUpperCase();
-    refreshAccount();
+    refreshAccount(); restoreCv();
   }
 }
 async function refreshAccount(){
@@ -255,6 +255,24 @@ function urlHint(){
 urlHint();
 $("#clearOffer").onclick=()=>{offerText.value="";offerUrl.value="";store.set("offerText","");store.set("offerUrl","");syncExample();offerText.focus()};
 
+/* Coller l'annonce en un geste (lit le presse-papiers, puis lance l'analyse) */
+const pasteBtn=$("#pasteBtn");
+if(!(navigator.clipboard&&navigator.clipboard.readText)) pasteBtn.hidden=true;
+pasteBtn.onclick=async()=>{
+  show("#offerMsg","");
+  let t="";
+  try{ t=(await navigator.clipboard.readText()||"").trim(); }
+  catch(e){ offerText.focus(); show("#offerMsg",TOUCH?"Ton navigateur n'a pas autorisé la lecture du presse-papiers. Appuie longuement dans le cadre ci-dessous, puis sur « Coller ».":"Ton navigateur n'a pas autorisé la lecture du presse-papiers. Clique dans le cadre ci-dessous, puis Ctrl/Cmd + V.","info"); return; }
+  if(!t){ show("#offerMsg","Le presse-papiers est vide. Copie d'abord la description de l'annonce.","info"); return; }
+  if(/^https?:\/\/\S+$/.test(t)){
+    offerUrl.value=t; offerUrl.dispatchEvent(new Event("input"));
+    show("#offerMsg","Lien ajouté. Copie maintenant la description de l'annonce, puis appuie à nouveau sur « Coller l'annonce ».","info"); return;
+  }
+  offerText.value=t.slice(0,15000); store.set("offerText",offerText.value); syncExample();
+  if(t.length>=80) $("#analyzeBtn").onclick();
+  else show("#offerMsg","Le texte copié est très court. Copie toute la description du poste.","info");
+};
+
 const savedInfo=store.get("offerInfo",null);
 if(savedInfo&&savedInfo._src===offerText.value.trim().slice(0,400)){S.offer.info=savedInfo;renderOffer()}
 
@@ -269,7 +287,7 @@ $("#analyzeBtn").onclick=async()=>{
   if(text.length>15000){show("#offerMsg","L'annonce est trop longue (15 000 caractères maximum). Retire les parties sans rapport avec le poste.","err");return}
   analyzing=(async()=>{try{need();busy(btn,true,"Analyse…");
     const info=await api("analyze_offer",{offerText:text,offerUrl:offerUrl.value.slice(0,500)});
-    info._src=text.slice(0,400); S.offer.info=info; store.set("offerInfo",info); renderOffer(); markDone(1);
+    info._src=text.slice(0,400); S.offer.info=info; store.set("offerInfo",info); renderOffer(); markDone(1); toast("Offre analysée");
     if(info.langue&&["fr","en","de","it"].includes(info.langue)) $("#ivLang").value=info.langue;
     updateKw();
   }catch(e){fail("#offerMsg",e)}finally{busy(btn,false)}})();
@@ -286,8 +304,8 @@ function renderOffer(){
     <div><label>Exigences</label><ul class="clean">${li(i.exigences)}</ul></div>
     <div><label>Mots-clés ATS</label><div class="chips">${(i.mots_cles_ats||[]).map(k=>`<span class="pill">${esc(k)}</span>`).join("")}</div></div>
     <div><label>Ce que l'entretien va creuser</label><ul class="clean">${li(i.themes_entretien)}</ul></div>
-    <div class="row"><button class="btn primary" id="toCv">Passer au CV</button></div></div>`;
-  $("#toCv").onclick=()=>go(2,true);
+    <div class="row"><button class="btn primary" id="toCv">${S.cv?"Adapter mon CV à cette offre":"Passer au CV"}</button>${S.cv?`<span class="hint" style="margin:0">${esc(S.cv.name)}</span>`:""}</div></div>`;
+  $("#toCv").onclick=()=>{go(2,true); if(S.cv) $("#adaptBtn").click();};
 }
 async function ensureOffer(where){
   if(S.offer.info)return true;
@@ -308,7 +326,7 @@ fileIn.addEventListener("change",()=>{const f=fileIn.files[0];if(f)loadCv(f)});
 
 let views={}; // nom -> fonction de rendu
 function setViews(v,active){
-  views=v; const t=$("#vtabs"); t.innerHTML="";
+  views=v; const t=$("#vtabs"); t.innerHTML=""; if(!active) return;
   Object.keys(v).forEach(k=>{const b=document.createElement("button");b.className="btn"+(k===active?" primary":"");b.textContent=k;b.onclick=()=>setViews(views,k);t.appendChild(b)});
   const el=$("#viewer"); el.innerHTML='<div class="empty"><span class="spinner"></span></div>';
   Promise.resolve(v[active](el)).catch(()=>{el.innerHTML='<div class="empty">Aperçu indisponible pour ce fichier. Le téléchargement fonctionne quand même.</div>'});
@@ -395,7 +413,26 @@ async function pdfText(buf){
   return out.join("\n").replace(/\n{3,}/g,"\n\n");
 }
 
-async function loadCv(f){
+const cvStore={
+  db(){return new Promise((res,rej)=>{const r=indexedDB.open("postula",1);r.onupgradeneeded=()=>r.result.createObjectStore("files");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})},
+  async op(mode,fn){const db=await this.db();return new Promise((res,rej)=>{const tx=db.transaction("files",mode);const q=fn(tx.objectStore("files"));tx.oncomplete=()=>res(q&&q.result);tx.onerror=()=>rej(tx.error)})},
+  save(v){return this.op("readwrite",s=>s.put(v,"cv")).catch(()=>{})},
+  get(){return this.op("readonly",s=>s.get("cv")).catch(()=>null)},
+  clear(){return this.op("readwrite",s=>s.delete("cv")).catch(()=>{})}
+};
+$("#forgetCv").onclick=async()=>{
+  await cvStore.clear(); $("#cvSaved").hidden=true; S.cv=null;
+  $("#dropTitle").textContent="Dépose ton CV ici"; $("#dropSub").textContent="ou clique pour choisir un fichier .docx ou .pdf";
+  $("#adaptBtn").disabled=true; $("#themeBtn").disabled=true; $("#photoRow").hidden=true;
+  setViews({},null); $("#viewer").innerHTML='<div class="empty"><span class="sheet-ghost" aria-hidden="true"></span>L\'aperçu de ton CV s\'affichera ici.</div>';
+  if(S.offer.info) renderOffer(); toast("CV oublié sur cet appareil");
+};
+async function restoreCv(){
+  const v=await cvStore.get(); if(!v||!v.buf||S.cv) return;
+  await loadCv(new File([v.buf],v.name,{type:v.type||""}),true);
+  if(S.offer.info) renderOffer();
+}
+async function loadCv(f,restored){
   show("#cvMsg",""); S.changes=[];S.adaptedBlob=null;S.adaptedText="";S.cvData=null;S.themePdf=null;S.photo=null;$("#photoRow").hidden=true;
   $("#changesCard").hidden=true;$("#dlDocx").hidden=true;$("#dlThemePdf").hidden=true;$("#kwBox").hidden=true;
   const name=f.name, ext=name.split(".").pop().toLowerCase();
@@ -421,6 +458,9 @@ async function loadCv(f){
     }
     $("#adaptBtn").disabled=false; $("#themeBtn").disabled=false; updateKw();
     findPhoto(ext,buf);
+    if(!restored) cvStore.save({name,type:f.type,buf:buf.slice(0),savedAt:Date.now()});
+    $("#cvSaved").hidden=false;
+    if(S.offer.info) renderOffer();
   }catch(e){
     $("#dropSub").textContent="ou clique pour choisir un fichier .docx ou .pdf";
     show("#cvMsg",e&&e.message==="lib"?"Les outils de lecture de fichiers n'ont pas pu se charger. Recharge la page.":"Impossible de lire ce fichier. Vérifie qu'il s'ouvre bien dans Word ou un lecteur PDF.","err");
