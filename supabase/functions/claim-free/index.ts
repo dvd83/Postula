@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
     const providers: string[] = [
       user.app_metadata?.provider,
       ...((user.app_metadata?.providers as string[] | undefined) ?? []),
-    ].filter(Boolean);
+    ].filter((p): p is string => typeof p === "string" && p.length > 0);
     if (!providers.some((p) => FREE_PROVIDERS.includes(p))) throw new AppError("provider_not_allowed", 403);
 
     // 2. Déjà débloqué ?
