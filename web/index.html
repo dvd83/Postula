@@ -4,68 +4,136 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Postula</title>
-<meta name="description" content="Adapte ton CV et ta lettre à chaque offre d'emploi, puis entraîne-toi avec un entretien vocal de 5 minutes noté.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230E7A68'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='800' font-size='20' text-anchor='middle' fill='white'%3EP%3C/text%3E%3C/svg%3E">
+<meta name="description" content="Colle une offre d'emploi : Postula adapte ton CV Word sans casser ta mise en page, rédige ta lettre de motivation et te fait passer un entretien de 5 minutes noté sur 10.">
+<meta name="theme-color" content="#F4F5F9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1320" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="Postula">
+<meta property="og:description" content="Ton CV taillé pour chaque offre. L'entretien répété avant le vrai.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23172036'/%3E%3Crect x='5' y='20' width='22' height='5' fill='%23FFE45E'/%3E%3Ctext x='16' y='23' font-family='Arial' font-weight='800' font-size='19' text-anchor='middle' fill='%23F4F5F9'%3EP%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Schibsted+Grotesk:wght@500;600;700;800&display=swap">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<div class="wrap">
-  <header class="top">
-    <div class="brand">
-      <h1>Postula<span>.</span></h1>
-      <p>Une offre, ton CV, ta lettre, et un entretien d'entraînement chronométré.</p>
-    </div>
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Postula, accueil"><span class="mark" aria-hidden="true"><b>P</b></span><span class="name">Postula</span></a>
     <div class="account" id="account" hidden>
-      <div class="acc-line"><span class="pill ok" id="accPlan">Découverte</span><span class="acc-quota" id="accQuota"></span></div>
-      <div class="acc-line"><span class="acc-email" id="accEmail"></span><button class="btn ghost sm" data-open-plans>Offres</button><button class="btn ghost sm" id="manageSub" hidden>Gérer mon abonnement</button><button class="btn ghost sm" id="logoutBtn">Se déconnecter</button></div>
+      <div class="acc-plan"><span class="pill ok" id="accPlan">Découverte</span><span class="acc-quota" id="accQuota"></span></div>
+      <button class="btn sm" data-open-plans>Offres</button>
+      <details class="acc-menu" id="accMenu">
+        <summary id="accInitial" aria-label="Mon compte">·</summary>
+        <div class="acc-pop">
+          <div class="acc-email" id="accEmail"></div>
+          <button class="btn sm" id="manageSub" hidden>Gérer mon abonnement</button>
+          <button class="btn sm" data-open-plans>Voir les offres</button>
+          <a class="btn sm" href="confidentialite.html">Mes données</a>
+          <button class="btn sm" id="logoutBtn">Se déconnecter</button>
+        </div>
+      </details>
     </div>
-  </header>
-  <section id="authScreen" class="auth">
-    <div class="auth-copy">
-      <h2>Ton CV adapté à chaque offre, puis l'entretien avant le vrai.</h2>
-      <ul class="clean">
-        <li>CV réécrit pour l'offre, mise en page Word conservée</li>
-        <li>Lettre de motivation sur mesure</li>
-        <li>Entretien vocal de 5 minutes, noté sur 10 avec un retour précis</li>
-      </ul>
-      <p class="lede">Offre Découverte gratuite : 1 CV adapté, 1 lettre et 1 entretien noté, sans carte bancaire.</p>
+    <a class="btn sm" href="#connexion" id="headerLogin">Se connecter</a>
+  </div>
+</header>
+
+<div id="authScreen">
+  <section class="wrap hero" id="connexion">
+    <div>
+      <h1>Ton CV taillé pour chaque offre. L'entretien répété avant le vrai.</h1>
+      <p class="sub">Colle une annonce : Postula réécrit ton CV Word sans toucher à ta mise en page, rédige ta lettre de motivation, puis te fait passer un entretien de 5&nbsp;minutes noté sur&nbsp;10.</p>
+      <div class="login">
+        <button class="btn oauth google" id="loginGoogle"><span class="g"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.5 5.5 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9h-4v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.7V6.6h-4a12 12 0 0 0 0 10.9l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4A12 12 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8z"/></svg></span>Continuer avec Google</button>
+        <button class="btn oauth" id="loginApple"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.7c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.5-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.3.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.2.1 2.3-.6 3.1-1.5z"/></svg>Continuer avec Apple</button>
+        <div id="authMsg"></div>
+        <p class="hint">En continuant, tu acceptes les <a href="conditions.html">conditions d'utilisation et de vente</a> et la <a href="confidentialite.html">politique de confidentialité</a>.</p>
+      </div>
+      <p class="freebie"><span class="pill ex">Gratuit</span><span><b>1 CV adapté, 1 lettre et 1 entretien noté</b>, sans carte bancaire.</span></p>
     </div>
-    <div class="card stack auth-box">
-      <h3>Connexion</h3>
-      <button class="btn oauth" id="loginGoogle"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.5 5.5 0 0 1-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.7z"/><path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9h-4v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.7V6.6h-4a12 12 0 0 0 0 10.9l4-3.1z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.3.6 4.5 1.8l3.4-3.4A12 12 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8z"/></svg>Continuer avec Google</button>
-      <button class="btn oauth" id="loginApple"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.7c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.5-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.3-.8s2 .8 3.3.8c1.4 0 2.3-1.3 3.1-2.5 1-1.4 1.4-2.8 1.4-2.9-.1 0-2.7-1-2.7-4zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.2.1 2.3-.6 3.1-1.5z"/></svg>Continuer avec Apple</button>
-      <div id="authMsg"></div>
-      <p class="hint">En continuant, tu acceptes les conditions d'utilisation et la politique de confidentialité. Tes CV restent dans ton navigateur et ne sont envoyés au serveur que le temps de la génération.</p>
+    <div class="demo" aria-hidden="true">
+      <div class="sheet">
+        <div class="who"><span class="ph"></span><div><div class="nm">Léa Moret</div><div class="tt">Cheffe de projet IT · Genève</div></div></div>
+        <div class="h">Profil</div>
+        <div class="ln">7 ans de <mark style="--d:.4s">transformation digitale</mark> en logistique</div>
+        <div class="h">Expérience</div>
+        <div class="ln mute">Rhône Logistique SA, 2021 – aujourd'hui</div>
+        <div class="ln">Pilotage du <mark style="--d:.9s">WMS</mark> sur 3 entrepôts, budget CHF 1,8 mio</div>
+        <div class="ln"><mark style="--d:1.3s">Conduite du changement</mark> auprès de 120 collaborateurs</div>
+        <div class="h">Compétences</div>
+        <div class="ln"><mark style="--d:1.7s">Scrum</mark>, Hermes, <mark style="--d:2s">appels d'offres publics</mark></div>
+      </div>
+      <div class="stamp">
+        <div class="k">Entretien d'entraînement</div>
+        <div class="n">7,8<small> /10</small></div>
+        <div class="tip">Exemples concrets et bien structurés. Chiffre davantage tes résultats.</div>
+      </div>
     </div>
   </section>
 
-  <div id="app" hidden>
-    <div class="msg info pay-banner" id="payBanner" role="status" hidden></div>
-    <section class="card stack claim" id="claimCard" hidden>
-      <div><h2>Active ton offre Découverte</h2><p class="lede">Une vérification rapide pour éviter les abus : l'offre gratuite est valable une fois par personne et par appareil.</p></div>
-      <div id="turnstileBox"></div>
-      <div id="claimMsg"></div>
-    </section>
+  <section class="section">
+    <div class="wrap">
+      <h2>Trois étapes pour une candidature prête à envoyer</h2>
+      <ol class="how">
+        <li><h3>Colle l'offre</h3><p>Le lien et le texte de l'annonce. Postula en tire les exigences et les mots-clés que les logiciels de tri recherchent.</p></li>
+        <li><h3>Adapte ton CV et ta lettre</h3><p>Ton CV Word est réécrit au plus près de l'offre, mise en page intacte. Chaque modification se valide une à une. La lettre suit.</p></li>
+        <li><h3>Passe l'entretien</h3><p>Un recruteur virtuel te pose ses questions à voix haute pendant 5&nbsp;minutes. Tu reçois une note, ce qui a marché et quoi retravailler.</p></li>
+      </ol>
+    </div>
+  </section>
 
-    <section class="card stack" id="plansDialog" hidden>
-      <div class="row" style="justify-content:space-between"><h2>Les offres</h2><button class="btn ghost" id="closePlans">Fermer</button></div>
+  <section class="section" id="tarifs">
+    <div class="wrap">
+      <h2>Des tarifs simples, sans engagement</h2>
       <div class="plans">
-        <div class="plan"><h3>Mensuel</h3><div class="price">14.90<small> CHF / mois</small></div><ul class="clean"><li>50 CV adaptés et 50 lettres par mois</li><li>20 entretiens notés par mois</li><li>Résiliable en un clic, sans engagement</li></ul><button class="btn" data-buy="monthly">Choisir</button></div>
-        <div class="plan best"><span class="pill ex">Le plus choisi</span><h3>Pass Recherche 3 mois</h3><div class="price">34.90<small> CHF une fois</small></div><ul class="clean"><li>150 CV adaptés et 150 lettres</li><li>60 entretiens notés</li><li>Sans renouvellement automatique</li></ul><button class="btn primary" data-buy="pass3m">Choisir</button></div>
-        <div class="plan"><h3>Recharge</h3><div class="price">5.90<small> CHF</small></div><ul class="clean"><li>+10 entretiens</li><li>Valables jusqu'à la fin de ton abonnement</li></ul><button class="btn" data-buy="topup">Ajouter</button></div>
+        <div class="plan"><h3>Mensuel</h3><div class="price">14.90<small> CHF par mois</small></div><ul class="clean"><li>50 CV adaptés et 50 lettres par mois</li><li>20 entretiens notés par mois</li><li>Résiliable en un clic, sans engagement</li></ul><button class="btn" data-login>Commencer gratuitement</button></div>
+        <div class="plan best"><span class="pill ex">Le plus choisi</span><h3>Pass Recherche 3 mois</h3><div class="price">34.90<small> CHF, une seule fois</small></div><ul class="clean"><li>150 CV adaptés et 150 lettres</li><li>60 entretiens notés</li><li>Sans renouvellement automatique</li></ul><button class="btn primary" data-login>Commencer gratuitement</button></div>
+        <div class="plan"><h3>Recharge</h3><div class="price">5.90<small> CHF</small></div><ul class="clean"><li>10 entretiens supplémentaires</li><li>S'ajoute à ton Mensuel ou à ton Pass</li><li>Valable jusqu'à la fin de ton offre</li></ul><button class="btn" data-login>Commencer gratuitement</button></div>
       </div>
-      <div id="plansMsg"></div>
-      <p class="hint">Paiement sécurisé par Stripe (carte, Apple Pay, Google Pay). Prix en francs suisses.</p>
-    </section>
+      <p class="free-line">Commence par l'offre Découverte, gratuite : 1 CV adapté, 1 lettre et 1 entretien noté. Paiement sécurisé par Stripe, prix en francs suisses.</p>
+    </div>
+  </section>
 
+  <section class="section">
+    <div class="wrap">
+      <h2>Questions fréquentes</h2>
+      <div class="faq">
+        <details><summary>Est-ce que ma mise en page est vraiment conservée ?</summary><p>Avec un CV Word (.docx), oui : seul le texte change, segment par segment, et les longueurs restent proches de l'original. Polices, couleurs, colonnes et photo ne bougent pas. Avec un PDF, le contenu est adapté puis remis en forme dans l'un de nos thèmes.</p></details>
+        <details><summary>Postula invente-t-il des expériences ?</summary><p>Non. Les textes sont reformulés à partir de ce qui figure dans ton CV et dans tes notes. Aucun diplôme, chiffre ou employeur n'est ajouté. Relis toujours avant d'envoyer.</p></details>
+        <details><summary>Que deviennent mes documents ?</summary><p>Ton CV reste dans ton navigateur. Il n'est envoyé au serveur que le temps de la génération, et les extraits utilisés pour l'entretien sont effacés sous 24&nbsp;heures. Le détail est dans la <a href="confidentialite.html">politique de confidentialité</a>.</p></details>
+        <details><summary>Je peux résilier quand je veux ?</summary><p>Oui. Le Mensuel se résilie en un clic depuis ton compte et reste actif jusqu'à la fin du mois payé. Le Pass 3 mois se paie une fois et ne se renouvelle pas.</p></details>
+        <details><summary>L'entretien se fait à l'oral ?</summary><p>Le recruteur pose ses questions à voix haute. Tu réponds au micro ou au clavier, selon ton navigateur et tes préférences. Chaque nouvelle tentative pose des questions différentes.</p></details>
+      </div>
+    </div>
+  </section>
+</div>
+
+<main class="wrap" id="app" hidden>
+  <div class="msg info pay-banner" id="payBanner" role="status" hidden></div>
+  <section class="card stack claim" id="claimCard" hidden>
+    <div class="stack" style="gap:6px"><h2>Active ton offre Découverte</h2><p class="lede">Une vérification rapide pour éviter les abus. L'offre gratuite est valable une fois par personne et par appareil.</p></div>
+    <div id="turnstileBox"></div>
+    <div id="claimMsg"></div>
+  </section>
+
+  <section class="card stack plans-panel" id="plansDialog" hidden>
+    <div class="row" style="justify-content:space-between"><h2>Les offres</h2><button class="btn ghost" id="closePlans">Fermer</button></div>
+    <div class="plans">
+      <div class="plan"><h3>Mensuel</h3><div class="price">14.90<small> CHF par mois</small></div><ul class="clean"><li>50 CV adaptés et 50 lettres par mois</li><li>20 entretiens notés par mois</li><li>Résiliable en un clic, sans engagement</li></ul><button class="btn" data-buy="monthly">Choisir le Mensuel</button></div>
+        <div class="plan best"><span class="pill ex">Le plus choisi</span><h3>Pass Recherche 3 mois</h3><div class="price">34.90<small> CHF, une seule fois</small></div><ul class="clean"><li>150 CV adaptés et 150 lettres</li><li>60 entretiens notés</li><li>Sans renouvellement automatique</li></ul><button class="btn primary" data-buy="pass3m">Choisir le Pass</button></div>
+        <div class="plan"><h3>Recharge</h3><div class="price">5.90<small> CHF</small></div><ul class="clean"><li>10 entretiens supplémentaires</li><li>S'ajoute à ton Mensuel ou à ton Pass</li><li>Valable jusqu'à la fin de ton offre</li></ul><button class="btn" data-buy="topup">Ajouter une recharge</button></div>
+    </div>
+    <div id="plansMsg"></div>
+    <p class="hint">Paiement sécurisé par Stripe (carte, Apple Pay, Google Pay). Prix en francs suisses. En payant, tu acceptes les <a href="conditions.html">conditions de vente</a>.</p>
+  </section>
 
   <nav class="steps" aria-label="Étapes">
-    <button data-go="1" aria-current="step"><span class="n">1</span><span class="t"><b>Offre</b><small>Lien ou texte du poste</small></span></button>
-    <button data-go="2"><span class="n">2</span><span class="t"><b>CV</b><small>Adapté, mise en page gardée</small></span></button>
-    <button data-go="3"><span class="n">3</span><span class="t"><b>Lettre</b><small>Motivation sur mesure</small></span></button>
-    <button data-go="4"><span class="n">4</span><span class="t"><b>Entretien</b><small>5 min, noté</small></span></button>
+    <ol>
+      <li><button data-go="1" aria-current="step"><span class="n">1</span><span class="t">Offre</span></button></li>
+      <li><button data-go="2"><span class="n">2</span><span class="t">CV</span></button></li>
+      <li><button data-go="3"><span class="n">3</span><span class="t">Lettre</span></button></li>
+      <li><button data-go="4"><span class="n">4</span><span class="t">Entretien</span></button></li>
+    </ol>
   </nav>
 
   <!-- ÉTAPE 1 -->
@@ -90,7 +158,7 @@
       </div>
       <div class="card stack" id="offerCard">
         <h3>Ce que le recruteur cherche</h3>
-        <p class="lede" id="offerEmpty">L'analyse fait ressortir le poste, les exigences et les mots-clés que les logiciels de tri (ATS) vont chercher dans ton CV.</p>
+        <div class="empty-state" id="offerEmpty"><p>Lance l'analyse : le poste, les exigences et les mots-clés que les logiciels de tri (ATS) chercheront dans ton CV s'afficheront ici.</p><div class="ghost-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div></div>
         <div id="offerOut" hidden></div>
       </div>
     </div>
@@ -104,6 +172,7 @@
           <div><h2>Ton CV</h2><p class="lede">Word (.docx) : seul le texte change, ta mise en page reste identique au pixel près. PDF : le contenu est adapté puis remis en forme avec un thème.</p></div>
           <label class="drop" id="drop" for="cvFile">
             <input id="cvFile" type="file" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
             <b id="dropTitle">Dépose ton CV ici</b>
             <span class="hint" id="dropSub">ou clique pour choisir un fichier .docx ou .pdf</span>
           </label>
@@ -145,7 +214,7 @@
       </div>
       <div class="card stack">
         <div class="vtabs" id="vtabs"></div>
-        <div class="viewer" id="viewer"><div class="empty">L'aperçu de ton CV s'affichera ici.</div></div>
+        <div class="viewer" id="viewer"><div class="empty"><span class="sheet-ghost" aria-hidden="true"></span>L'aperçu de ton CV s'affichera ici.</div></div>
       </div>
     </div>
   </section>
@@ -205,7 +274,7 @@
             <select id="ivStyle"><option value="hasard">Au hasard</option><option value="bienveillant">Bienveillant</option><option value="exigeant">Exigeant</option><option value="pressé">Pressé, va droit au but</option></select></div>
         </div>
         <div><label for="ivVoice">Voix du recruteur</label><select id="ivVoice"></select><div class="hint" id="voiceHint"></div></div>
-        <div class="msg info" style="font-size:13px">Le chrono tourne pendant que le recruteur parle et pendant que tu réponds. Il se met en pause quand le recruteur prépare sa question.</div>
+        <div class="msg info">Le chrono tourne pendant que le recruteur parle et pendant que tu réponds. Il se met en pause quand le recruteur prépare sa question.</div>
         <div class="row"><button class="btn primary" id="ivStart">Commencer l'entretien</button></div>
         <div id="ivMsg"></div>
       </div>
@@ -247,10 +316,15 @@
 
     <div id="ivResult" hidden></div>
   </section>
+</main>
 
-    </div>
-<footer class="note">Postula est un outil d'entraînement. Tes fichiers restent dans ton navigateur et ne sont envoyés au serveur que le temps de la génération, sans être conservés. Relis toujours ton CV et ta lettre avant de les envoyer.</footer>
-</div>
+<footer class="site">
+  <div class="wrap">
+    <span>© 2026 Postula. Outil d'entraînement : relis toujours ton CV et ta lettre avant de les envoyer.</span>
+    <nav aria-label="Informations légales"><a href="conditions.html">Conditions</a><a href="confidentialite.html">Confidentialité</a><a href="mentions-legales.html">Mentions légales</a></nav>
+  </div>
+</footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>

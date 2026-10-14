@@ -95,8 +95,12 @@ sb.auth.onAuthStateChange((_ev,s)=>{session=s;renderAuth()});
 sb.auth.getSession().then(({data})=>{session=data.session;renderAuth()});
 function renderAuth(){
   const inApp=!!session;
-  $("#authScreen").hidden=inApp; $("#app").hidden=!inApp; $("#account").hidden=!inApp;
-  if(inApp){ $("#accEmail").textContent=session.user.email||""; refreshAccount(); }
+  $("#authScreen").hidden=inApp; $("#app").hidden=!inApp; $("#account").hidden=!inApp; $("#headerLogin").hidden=inApp;
+  if(inApp){
+    const email=session.user.email||"", name=(session.user.user_metadata&&session.user.user_metadata.full_name)||email;
+    $("#accEmail").textContent=email; $("#accInitial").textContent=(name.trim()[0]||"·").toUpperCase();
+    refreshAccount();
+  }
 }
 async function refreshAccount(){
   if(!session)return;
@@ -106,7 +110,7 @@ async function refreshAccount(){
   const plan={free:"Découverte",monthly:"Mensuel",pass3m:"Pass 3 mois"}[data.plan]||data.plan;
   $("#accPlan").textContent=plan;
   const q=data.quota||{}, left=k=>Math.max(0,(q[k]?.limit||0)-(q[k]?.used||0));
-  $("#accQuota").innerHTML=["cv","letter","interview"].map(k=>`<span title="${KIND_LABEL[k]} restants">${left(k)+(k==="interview"?data.extra_interviews:0)} ${({cv:"CV",letter:"lettres",interview:"entretiens"})[k]}</span>`).join("<span aria-hidden='true'>·</span>");
+  $("#accQuota").innerHTML=["cv","letter","interview"].map(k=>{const n=left(k)+(k==="interview"?data.extra_interviews:0);return `<span title="${KIND_LABEL[k]} restants">${n} ${({cv:"CV",letter:n>1?"lettres":"lettre",interview:n>1?"entretiens":"entretien"})[k]}</span>`}).join("<span aria-hidden='true'>·</span>");
   if(data.plan==="free"&&!data.free_claimed) openClaim(); else $("#claimCard").hidden=true;
   $("#manageSub").hidden=!data.customer;
   const until=data.period_end?new Date(data.period_end).toLocaleDateString("fr-CH"):"";
@@ -198,13 +202,27 @@ $("#manageSub").onclick=async()=>{
 })();
 
 /* ---------- Navigation ---------- */
-function go(n){
-  $$("section[data-step]").forEach(s=>s.hidden=s.dataset.step!==String(n));
+function go(n,scroll){
+  $$("section[data-step]").forEach(s=>{const on=s.dataset.step===String(n);if(on&&s.hidden){s.classList.remove("enter");void s.offsetWidth;s.classList.add("enter")}s.hidden=!on});
+  const ol=$("nav.steps ol"); if(ol) ol.style.setProperty("--p",(n-1)/3);
+  if(scroll){const top=$("#app").getBoundingClientRect().top+scrollY-70; if(scrollY>top) scrollTo({top,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"})}
   $$("nav.steps button").forEach(b=>{if(b.dataset.go===String(n))b.setAttribute("aria-current","step");else b.removeAttribute("aria-current")});
   if(n===4) refreshHistory();
   store.set("step",n);
 }
-$$("nav.steps button").forEach(b=>b.onclick=()=>go(+b.dataset.go));
+$$("nav.steps button").forEach(b=>b.onclick=()=>go(+b.dataset.go,true));
+
+/* Petits plus d'interface : en-tête au défilement, toast, menu compte, boutons « Commencer » */
+const header=$("#top");
+addEventListener("scroll",()=>header.classList.toggle("scrolled",scrollY>4),{passive:true});
+let toastTimer=null;
+function toast(text){const t=$("#toast");t.textContent=text;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),2600)}
+document.addEventListener("click",e=>{
+  const m=$("#accMenu"); if(m&&m.open&&(!m.contains(e.target)||e.target.closest(".acc-pop .btn"))) m.open=false;
+  const c=e.target.closest("[data-login]"); if(c){e.preventDefault();$("#connexion").scrollIntoView({behavior:"smooth",block:"start"});setTimeout(()=>$("#loginGoogle").focus({preventScroll:true}),450)}
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"){const m=$("#accMenu");if(m)m.open=false}});
+if(!CFG.APPLE_ENABLED) $("#loginApple").hidden=true;
 function markDone(n){$(`nav.steps button[data-go="${n}"]`).classList.add("done")}
 
 /* ---------- Étape 1 : offre ---------- */
@@ -246,7 +264,7 @@ function renderOffer(){
     <div><label>Mots-clés ATS</label><div class="chips">${(i.mots_cles_ats||[]).map(k=>`<span class="pill">${esc(k)}</span>`).join("")}</div></div>
     <div><label>Ce que l'entretien va creuser</label><ul class="clean">${li(i.themes_entretien)}</ul></div>
     <div class="row"><button class="btn primary" id="toCv">Passer au CV</button></div></div>`;
-  $("#toCv").onclick=()=>go(2);
+  $("#toCv").onclick=()=>go(2,true);
 }
 async function ensureOffer(where){
   if(S.offer.info)return true;
@@ -753,7 +771,7 @@ $("#letterBtn").onclick=async()=>{
   }catch(e){ if(e&&e.text)letterText.value=e.text; fail("#letterMsg",e) }
   finally{busy(btn,false);$("#letterStop").hidden=true;letterText.placeholder="La lettre apparaîtra ici pendant sa rédaction.";letterReady()}
 };
-$("#copyLetter").onclick=async()=>{try{await navigator.clipboard.writeText(letterText.value);show("#letterMsg","Lettre copiée.","info")}catch(e){letterText.select();show("#letterMsg","Texte sélectionné : copie-le avec Ctrl/Cmd + C.","info")}};
+$("#copyLetter").onclick=async()=>{try{await navigator.clipboard.writeText(letterText.value);toast("Lettre copiée")}catch(e){letterText.select();show("#letterMsg","Texte sélectionné : copie-le avec Ctrl/Cmd + C.","info")}};
 const xmlEsc=s=>String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 $("#dlLetterDocx").onclick=async()=>{
   try{
