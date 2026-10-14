@@ -236,6 +236,12 @@ function syncExample(){$("#exBadge").hidden=offerText.value.trim()!==EXAMPLE.tri
 syncExample();
 offerText.addEventListener("input",()=>{store.set("offerText",offerText.value);syncExample()});
 offerUrl.addEventListener("input",()=>{store.set("offerUrl",offerUrl.value);
+  // Nouveau lien : l'exemple prérempli ou l'annonce précédente ne doivent pas être analysés à sa place
+  if(offerUrl.value.trim()){
+    if(offerText.value.trim()===EXAMPLE.trim()){offerText.value="";store.set("offerText","");syncExample()}
+    else if(offerText.value.trim()&&S.offer.info&&S.offer.info._src===offerText.value.trim().slice(0,400))
+      show("#offerMsg","Le texte ci-dessous est celui de ton annonce précédente. Remplace-le par le texte de la nouvelle annonce.","info");
+  }
   const li=/linkedin\./i.test(offerUrl.value);
   urlHint();});
 const TOUCH=matchMedia("(pointer: coarse)").matches;
