@@ -19,7 +19,7 @@
     </div>
     <div class="account" id="account" hidden>
       <div class="acc-line"><span class="pill ok" id="accPlan">Découverte</span><span class="acc-quota" id="accQuota"></span></div>
-      <div class="acc-line"><span class="acc-email" id="accEmail"></span><button class="btn ghost sm" data-open-plans>Offres</button><button class="btn ghost sm" id="logoutBtn">Se déconnecter</button></div>
+      <div class="acc-line"><span class="acc-email" id="accEmail"></span><button class="btn ghost sm" data-open-plans>Offres</button><button class="btn ghost sm" id="manageSub" hidden>Gérer mon abonnement</button><button class="btn ghost sm" id="logoutBtn">Se déconnecter</button></div>
     </div>
   </header>
   <section id="authScreen" class="auth">
@@ -42,6 +42,7 @@
   </section>
 
   <div id="app" hidden>
+    <div class="msg info pay-banner" id="payBanner" role="status" hidden></div>
     <section class="card stack claim" id="claimCard" hidden>
       <div><h2>Active ton offre Découverte</h2><p class="lede">Une vérification rapide pour éviter les abus : l'offre gratuite est valable une fois par personne et par appareil.</p></div>
       <div id="turnstileBox"></div>
@@ -51,11 +52,12 @@
     <section class="card stack" id="plansDialog" hidden>
       <div class="row" style="justify-content:space-between"><h2>Les offres</h2><button class="btn ghost" id="closePlans">Fermer</button></div>
       <div class="plans">
-        <div class="plan"><h3>Mensuel</h3><div class="price">14.90<small> CHF / mois</small></div><ul class="clean"><li>50 CV adaptés et 50 lettres par mois</li><li>20 entretiens notés par mois</li><li>Résiliable en un clic</li></ul><button class="btn" data-buy="monthly">Choisir</button></div>
+        <div class="plan"><h3>Mensuel</h3><div class="price">14.90<small> CHF / mois</small></div><ul class="clean"><li>50 CV adaptés et 50 lettres par mois</li><li>20 entretiens notés par mois</li><li>Résiliable en un clic, sans engagement</li></ul><button class="btn" data-buy="monthly">Choisir</button></div>
         <div class="plan best"><span class="pill ex">Le plus choisi</span><h3>Pass Recherche 3 mois</h3><div class="price">34.90<small> CHF une fois</small></div><ul class="clean"><li>150 CV adaptés et 150 lettres</li><li>60 entretiens notés</li><li>Sans renouvellement automatique</li></ul><button class="btn primary" data-buy="pass3m">Choisir</button></div>
         <div class="plan"><h3>Recharge</h3><div class="price">5.90<small> CHF</small></div><ul class="clean"><li>+10 entretiens</li><li>Valables jusqu'à la fin de ton abonnement</li></ul><button class="btn" data-buy="topup">Ajouter</button></div>
       </div>
       <div id="plansMsg"></div>
+      <p class="hint">Paiement sécurisé par Stripe (carte, Apple Pay, Google Pay). Prix en francs suisses.</p>
     </section>
 
 

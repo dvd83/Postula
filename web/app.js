@@ -108,6 +108,10 @@ async function refreshAccount(){
   const q=data.quota||{}, left=k=>Math.max(0,(q[k]?.limit||0)-(q[k]?.used||0));
   $("#accQuota").innerHTML=["cv","letter","interview"].map(k=>`<span title="${KIND_LABEL[k]} restants">${left(k)+(k==="interview"?data.extra_interviews:0)} ${({cv:"CV",letter:"lettres",interview:"entretiens"})[k]}</span>`).join("<span aria-hidden='true'>·</span>");
   if(data.plan==="free"&&!data.free_claimed) openClaim(); else $("#claimCard").hidden=true;
+  $("#manageSub").hidden=!data.customer;
+  const until=data.period_end?new Date(data.period_end).toLocaleDateString("fr-CH"):"";
+  $("#accPlan").textContent=plan+(data.plan!=="free"&&until?(data.active?(data.subscription?` · renouvellement le ${until}`:` · jusqu'au ${until}`):" · expiré"):"");
+  $("#accPlan").classList.toggle("miss",data.plan!=="free"&&!data.active);
 }
 
 /* Activation de l'offre Découverte : captcha + empreinte d'appareil */
@@ -141,7 +145,57 @@ async function claimFree(token){
 /* Offres (le paiement arrive à l'étape suivante) */
 function openPlans(){ $("#plansDialog").hidden=false; $("#plansDialog").scrollIntoView({behavior:"smooth",block:"center"}) }
 $("#closePlans").onclick=()=>{$("#plansDialog").hidden=true};
-$$("[data-buy]").forEach(b=>b.onclick=()=>show("#plansMsg","Le paiement en ligne arrive très bientôt. Écris-nous pour un accès anticipé.","info"));
+async function billing(payload){
+  const {data:{session:s}}=await sb.auth.getSession();
+  if(!s) throw {code:"unauthorized"};
+  const res=await fetch(`${CFG.SUPABASE_URL}/functions/v1/billing`,{method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":`Bearer ${s.access_token}`,"apikey":CFG.SUPABASE_KEY},
+    body:JSON.stringify(payload)});
+  const body=await res.json().catch(()=>({}));
+  if(!res.ok||!body.url) throw {code:body.error||"server_error",until:body.until};
+  return body.url;
+}
+const BILLING_ERR={
+  topup_requires_plan:"La recharge s'ajoute à un abonnement ou un pass en cours. Choisis d'abord le Mensuel ou le Pass 3 mois.",
+  already_subscribed:"Tu as déjà un abonnement mensuel actif. Gère-le avec le bouton « Gérer mon abonnement ».",
+  plan_active:"Tu as déjà une offre active. Tu pourras en reprendre une à son échéance, ou ajouter une recharge d'entretiens.",
+  payments_not_configured:"Le paiement en ligne n'est pas encore ouvert. Réessaie bientôt.",
+  price_not_found:"Le paiement en ligne n'est pas encore ouvert. Réessaie bientôt.",
+  no_customer:"Aucun paiement n'est encore associé à ce compte."
+};
+function billingMsg(e){
+  let m=BILLING_ERR[e&&e.code]||"Le paiement n'a pas pu démarrer. Réessaie dans un instant.";
+  if(e&&e.code==="plan_active"&&e.until) m=`Ton offre actuelle est valable jusqu'au ${new Date(e.until).toLocaleDateString("fr-CH")}. Tu pourras en reprendre une ensuite, ou ajouter une recharge d'entretiens.`;
+  return m;
+}
+$$("[data-buy]").forEach(b=>b.onclick=async()=>{
+  show("#plansMsg",""); busy(b,true,"Redirection…");
+  try{ location.href=await billing({action:"checkout",product:b.dataset.buy}); }
+  catch(e){ busy(b,false); show("#plansMsg",billingMsg(e),"err"); }
+});
+$("#manageSub").onclick=async()=>{
+  const b=$("#manageSub"); show("#plansMsg",""); busy(b,true,"Ouverture…");
+  try{ location.href=await billing({action:"portal"}); }
+  catch(e){ busy(b,false); openPlans(); show("#plansMsg",billingMsg(e),"err"); }
+};
+/* Retour de la page de paiement Stripe */
+(function(){
+  const p=new URLSearchParams(location.search), st=p.get("paiement");
+  if(!st)return;
+  history.replaceState(null,"",location.pathname);
+  if(st==="annule"){ setTimeout(()=>{openPlans();show("#plansMsg","Paiement annulé : rien n'a été débité.","info")},300); return; }
+  const label={monthly:"Ton abonnement Mensuel",pass3m:"Ton Pass Recherche 3 mois",topup:"Ta recharge de 10 entretiens"}[p.get("offre")]||"Ton offre";
+  $("#payBanner").hidden=false; $("#payBanner").innerHTML=`<span class="spinner"></span> Paiement reçu. Activation de ton offre…`;
+  let tries=0;
+  const poll=async()=>{
+    tries++; await refreshAccount();
+    const done=account&&(p.get("offre")==="topup"?true:account.active);
+    if(done&&(p.get("offre")!=="topup"||tries>2)){ $("#payBanner").innerHTML=`<b>${label} est actif.</b> Merci ! Le reçu t'a été envoyé par e-mail.`; setTimeout(()=>{$("#payBanner").hidden=true},8000); return; }
+    if(tries<15) setTimeout(poll,2000);
+    else $("#payBanner").innerHTML="Le paiement est bien reçu, l'activation prend un peu plus de temps que prévu. Recharge la page dans une minute.";
+  };
+  setTimeout(poll,1500);
+})();
 
 /* ---------- Navigation ---------- */
 function go(n){

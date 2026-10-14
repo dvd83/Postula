@@ -29,7 +29,7 @@ jobs:
           deno-version: v2.x
       - name: Typage des fonctions serveur
         working-directory: supabase/functions
-        run: deno check ai/index.ts claim-free/index.ts
+        run: deno check ai/index.ts claim-free/index.ts billing/index.ts stripe-webhook/index.ts
 
       - name: Aucun secret dans le dépôt
         run: |

@@ -193,3 +193,4 @@ footer.note{margin-top:28px;color:var(--mute);font-size:12.5px;border-top:1px so
 .plan .price small{font-family:var(--f-body);font-size:13px;font-weight:500;color:var(--mute)}
 .plan ul{flex:1}
 .msg a{color:inherit;font-weight:600}
+.pay-banner{margin-bottom:20px;display:flex;gap:8px;align-items:center}

@@ -40,7 +40,21 @@ Tous les seuils sont dans la table `app_settings` et se changent sans redéploye
 update public.app_settings set value = '50' where key = 'free_daily_budget_usd';
 ```
 
-## Gérer un compte (en attendant le paiement en ligne)
+## Paiement
+
+Stripe Checkout (`supabase/functions/billing`) et webhook signé (`supabase/functions/stripe-webhook`). Chaque événement Stripe est appliqué une seule fois (`stripe_events`) par `public.apply_purchase()` :
+
+| Événement Stripe | Effet |
+|---|---|
+| `checkout.session.completed` (Mensuel) | offre `monthly`, cycle de quotas remis à zéro, fin = fin de période Stripe + 2 jours |
+| `checkout.session.completed` (Pass) | offre `pass3m` pour 90 jours |
+| `checkout.session.completed` (Recharge) | +10 entretiens |
+| `invoice.paid` (renouvellement) | nouveau cycle de quotas |
+| `customer.subscription.deleted` | fin de l'abonnement |
+
+Configuration : voir `docs/SETUP.md`, section 9.
+
+## Gérer un compte à la main
 
 ```sql
 -- Passer un compte en Pass 3 mois

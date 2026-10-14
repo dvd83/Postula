@@ -6,3 +6,10 @@ verify_jwt = true
 
 [functions.claim-free]
 verify_jwt = true
+
+[functions.billing]
+verify_jwt = true
+
+# Appelée par Stripe (pas d'utilisateur connecté) : authentifiée par la signature Stripe dans le code
+[functions.stripe-webhook]
+verify_jwt = false

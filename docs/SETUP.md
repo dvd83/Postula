@@ -65,3 +65,36 @@ Supabase → **Authentication → URL Configuration** :
 ## Vérifier
 
 Ouvre le site, connecte-toi avec Google, valide le captcha : le compteur « 2 CV · 1 lettres · 1 entretiens » apparaît en haut à droite.
+
+## 9. Paiement Stripe
+
+Le code est en place : fonctions `billing` (page de paiement, espace client) et `stripe-webhook` (activation automatique de l'offre). Commence en **mode test**, puis refais les étapes 9.2 à 9.5 en mode réel (« live »).
+
+### 9.1 Compte
+https://dashboard.stripe.com/register → pays **Suisse**. L'activation du mode réel demande l'identité, l'IBAN et une description de l'activité. Le mode test fonctionne tout de suite.
+
+### 9.2 Produits (Catalogue de produits → Ajouter un produit)
+
+| Produit | Prix | Type | Lookup key (Options avancées du prix) |
+|---|---|---|---|
+| Postula Mensuel | 14.90 CHF | Récurrent, mensuel | `postula_monthly` |
+| Postula Pass Recherche 3 mois | 34.90 CHF | Ponctuel | `postula_pass3m` |
+| Postula Recharge 10 entretiens | 5.90 CHF | Ponctuel | `postula_topup` |
+
+La **lookup key** doit être exacte : c'est par elle que le code retrouve le prix.
+
+### 9.3 Clé secrète
+Développeurs → Clés API → **Clé secrète** (`sk_test_…`). Supabase → Edge Functions → Secrets → `STRIPE_SECRET_KEY`.
+
+### 9.4 Webhook
+Développeurs → Webhooks → **Ajouter une destination** :
+- URL : `https://gnnslezorkjlpprmroiv.supabase.co/functions/v1/stripe-webhook`
+- Événements : `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `customer.subscription.deleted`
+
+Copie la **clé de signature** (`whsec_…`) → Supabase → Secrets → `STRIPE_WEBHOOK_SECRET`.
+
+### 9.5 Espace client
+Paramètres → Facturation → **Portail client** → Activer (résiliation, moyens de paiement, factures).
+
+### 9.6 Tester
+Sur le site : Offres → Mensuel → carte `4242 4242 4242 4242`, date future, CVC quelconque. De retour sur Postula, le bandeau « Ton abonnement Mensuel est actif » apparaît et le compteur passe à 50 CV.
