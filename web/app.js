@@ -115,7 +115,8 @@ async function refreshAccount(){
   if(data.plan==="free"&&!data.free_claimed) openClaim(); else $("#claimCard").hidden=true;
   $("#manageSub").hidden=!data.customer;
   const until=data.period_end?new Date(data.period_end).toLocaleDateString("fr-CH"):"";
-  $("#accPlan").textContent=plan+(data.plan!=="free"&&until?(data.active?(data.subscription?` · renouvellement le ${until}`:` · jusqu'au ${until}`):" · expiré"):"");
+  const extra=data.plan!=="free"&&until?(data.active?(data.subscription?`renouvellement le ${until}`:`jusqu'au ${until}`):"expiré"):"";
+  $("#accPlan").innerHTML=esc(plan)+(extra?(data.active?`<span class="long"> · ${esc(extra)}</span>`:` · ${esc(extra)}`):"");
   $("#accPlan").classList.toggle("miss",data.plan!=="free"&&!data.active);
 }
 
@@ -215,6 +216,8 @@ $$("nav.steps button").forEach(b=>b.onclick=()=>go(+b.dataset.go,true));
 
 /* Petits plus d'interface : en-tête au défilement, toast, menu compte, boutons « Commencer » */
 const header=$("#top");
+const setHdr=()=>document.documentElement.style.setProperty("--hdr",header.offsetHeight+"px");
+setHdr(); try{new ResizeObserver(setHdr).observe(header)}catch(e){addEventListener("resize",setHdr)}
 addEventListener("scroll",()=>header.classList.toggle("scrolled",scrollY>4),{passive:true});
 let toastTimer=null;
 function toast(text){const t=$("#toast");t.textContent=text;t.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove("show"),2600)}
@@ -234,7 +237,16 @@ syncExample();
 offerText.addEventListener("input",()=>{store.set("offerText",offerText.value);syncExample()});
 offerUrl.addEventListener("input",()=>{store.set("offerUrl",offerUrl.value);
   const li=/linkedin\./i.test(offerUrl.value);
-  $("#urlHint").textContent=li?"LinkedIn exige une connexion : la page ne peut pas être lue automatiquement. Ouvre l'annonce, sélectionne tout le texte (Ctrl/Cmd + A) et colle-le ci-dessous.":"Le lien est gardé comme référence. Colle aussi le texte de l'annonce ci-dessous : la page ne peut pas aller lire d'autres sites.";});
+  urlHint();});
+const TOUCH=matchMedia("(pointer: coarse)").matches;
+function urlHint(){
+  const li=/linkedin\./i.test(offerUrl.value);
+  const how=TOUCH
+    ?"Ouvre l'annonce, appuie sur « Afficher plus », puis garde le doigt appuyé sur la description pour la sélectionner et la copier."
+    :"Ouvre l'annonce, sélectionne la description (Ctrl/Cmd + A sélectionne toute la page) et copie-la.";
+  $("#urlHint").textContent=(li?"LinkedIn ne laisse pas lire ses annonces automatiquement : colle aussi le texte ci-dessous. ":"Le lien sert de référence : colle aussi le texte de l'annonce ci-dessous. ")+how;
+}
+urlHint();
 $("#clearOffer").onclick=()=>{offerText.value="";offerUrl.value="";store.set("offerText","");store.set("offerUrl","");syncExample();offerText.focus()};
 
 const savedInfo=store.get("offerInfo",null);
@@ -243,7 +255,11 @@ if(savedInfo&&savedInfo._src===offerText.value.trim().slice(0,400)){S.offer.info
 $("#analyzeBtn").onclick=async()=>{
   const btn=$("#analyzeBtn"); show("#offerMsg","");
   const text=offerText.value.trim();
-  if(text.length<80){show("#offerMsg","Colle le texte complet de l'annonce (au moins quelques lignes) pour que l'analyse soit utile.","err");return}
+  if(text.length<80){
+    show("#offerMsg",offerUrl.value.trim()&&!text
+      ?"Le lien seul ne suffit pas : colle aussi le texte de l'annonce dans le cadre « Texte de l'annonce »."
+      :"Colle le texte complet de l'annonce (au moins quelques lignes) pour que l'analyse soit utile.","err");
+    offerText.focus();return}
   if(text.length>15000){show("#offerMsg","L'annonce est trop longue (15 000 caractères maximum). Retire les parties sans rapport avec le poste.","err");return}
   analyzing=(async()=>{try{need();busy(btn,true,"Analyse…");
     const info=await api("analyze_offer",{offerText:text,offerUrl:offerUrl.value.slice(0,500)});

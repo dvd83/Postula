@@ -203,7 +203,7 @@ footer.site a{color:var(--ink-2);text-decoration:none}
 footer.site a:hover{color:var(--ink);text-decoration:underline}
 
 /* ---------- Application : étapes ---------- */
-.steps{position:sticky;top:64px;z-index:20;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);margin:0 calc(-1 * max(20px,env(safe-area-inset-left,0px))) 22px;padding:12px max(20px,env(safe-area-inset-left,0px))}
+.steps{position:sticky;top:var(--hdr,64px);z-index:20;background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);margin:0 calc(-1 * max(20px,env(safe-area-inset-left,0px))) 22px;padding:12px max(20px,env(safe-area-inset-left,0px))}
 .steps ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));position:relative}
 .steps ol::before,.steps ol::after{content:"";position:absolute;top:17px;left:12.5%;right:12.5%;height:2px;background:var(--line);border-radius:2px}
 .steps ol::after{background:var(--ink);right:auto;width:calc(75% * var(--p,0));transition:width .45s var(--ease)}
@@ -365,3 +365,15 @@ section[data-step].enter{animation:stepin .32s var(--ease)}
 }
 .vtabs:empty{display:none}
 .legal .toc{margin:26px 0 10px}
+
+/* En-tête compact sur mobile : une seule ligne */
+.acc-plan .pill{max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:640px){
+  header.top .wrap{min-height:58px;gap:10px}
+  .brand .name{font-size:19px}
+  .account{flex-wrap:nowrap;gap:6px}
+  .acc-plan .pill .long{display:none}
+  .account>.btn.sm{padding:8px 10px}
+  .steps .n{width:32px;height:32px;font-size:14px}
+  .steps ol::before,.steps ol::after{top:15px}
+}

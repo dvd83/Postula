@@ -144,11 +144,11 @@
         <div>
           <label for="offerUrl">Lien de l'annonce</label>
           <input id="offerUrl" type="url" placeholder="https://www.linkedin.com/jobs/view/…">
-          <div class="hint" id="urlHint">LinkedIn exige une connexion : la page ne peut pas être lue automatiquement. Ouvre l'annonce, sélectionne tout le texte (Ctrl/Cmd + A) et colle-le ci-dessous.</div>
+          <div class="hint" id="urlHint"></div>
         </div>
         <div>
           <div class="row" style="justify-content:space-between"><label for="offerText" style="margin:0">Texte de l'annonce</label><span class="pill ex" id="exBadge">Exemple</span></div>
-          <textarea id="offerText" rows="12" style="margin-top:6px"></textarea>
+          <textarea id="offerText" rows="12" style="margin-top:6px" placeholder="Colle ici la description complète du poste : missions, profil recherché, conditions…"></textarea>
         </div>
         <div class="row">
           <button class="btn primary" id="analyzeBtn">Analyser l'offre</button>
