@@ -107,7 +107,7 @@ async function callAnthropic(key: string, body: Record<string, unknown>) {
 
 export async function llm(opts: {
   tier: Tier; maxTokens: number; system?: string;
-  messages: { role: "user" | "assistant"; content: string }[];
+  messages: { role: "user" | "assistant"; content: string | Record<string, unknown>[] }[];
 }): Promise<LlmResult> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) throw new AppError("server_not_configured", 500);

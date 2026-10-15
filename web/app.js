@@ -62,6 +62,7 @@ function errMsg(e){
     case "free_budget_exhausted":return `L'offre Découverte est très demandée aujourd'hui : réessaie demain, ou <a href="#" data-open-plans>passe à une offre payante</a>.`;
     case "blocked":return "Ce compte est suspendu. Écris-nous si tu penses que c'est une erreur.";
     case "session_over":return "Le temps de cet entretien est écoulé.";
+    case "scan_unreadable":return "Le texte de ce CV en image n'a pas pu être lu. Utilise si possible un CV Word, ou un PDF exporté depuis Word ou Canva en « PDF standard ».";
     case "too_large":return "Le document est trop long. Utilise un CV de 5 pages maximum et une annonce plus courte.";
     case "offer_too_short":return "Colle le texte complet de l'annonce (au moins quelques lignes).";
     case "not_an_offer":return "Ce texte ne ressemble pas à une offre d'emploi. Colle le texte de l'annonce.";
@@ -478,7 +479,7 @@ async function restoreCv(){
   const v=await cvStore.get(); if(!v||S.cv) return;
   if(v.kind==="text"&&v.text){ useProfileText(v.text,true); return; }
   if(!v.buf) return;
-  await loadCv(new File([v.buf],v.name,{type:v.type||""}),true);
+  await loadCv(new File([v.buf],v.name,{type:v.type||""}),{ocr:v.ocr||null});
   if(S.offer.info) renderOffer();
 }
 async function loadCv(f,restored){
@@ -498,23 +499,56 @@ async function loadCv(f,restored){
       setViews({"Original":el=>renderDocxInto(el,new Blob([buf]))},"Original");
     }else{
       if(!window.pdfjsLib)throw new Error("lib");
-      const text=await pdfText(buf);
-      if(text.trim().length<60){show("#cvMsg","Ce PDF ne contient pas de texte lisible (CV scanné en image ?). Exporte-le à nouveau depuis Word, ou utilise le .docx.","err")}
-      S.cv={kind:"pdf",name,buf,text};
+      let text=await pdfText(buf), scanned=null;
+      if(text.trim().length<60){
+        // CV en image (scan, export Canva « image »…) : l'IA lit la page
+        scanned=restored&&restored.ocr?restored.ocr:await readScannedPdf(buf);
+        text=scanned.text;
+      }
+      S.cv={kind:"pdf",name,buf,text,scanned};
       $("#dropSub").textContent="PDF · contenu adapté puis remis en forme avec le thème choisi";
       setViews({"Original":el=>renderPdfInto(el,buf)},"Original");
-      if(/linkedin\.com\/in\//i.test(text)) show("#cvMsg","Profil LinkedIn reconnu : il sera transformé en CV avec le thème choisi ci-dessous.","info");
+      if(scanned) show("#cvMsg","Ce CV est une image : son texte a été lu automatiquement. Il sera adapté puis remis en forme avec le thème choisi ci-dessous (vérifie le résultat).","info");
+      else if(/linkedin\.com\/in\//i.test(text)) show("#cvMsg","Profil LinkedIn reconnu : il sera transformé en CV avec le thème choisi ci-dessous.","info");
       else show("#cvMsg","Un PDF ne se modifie pas proprement sur place. Le contenu sera adapté puis mis en forme avec le thème choisi ci-dessous. Pour garder ta mise en page exacte, charge plutôt ton CV en .docx.","info");
     }
     $("#adaptBtn").disabled=false; $("#themeBtn").disabled=false; updateKw();
-    findPhoto(ext,buf);
-    if(!restored) cvStore.save({name,type:f.type,buf:buf.slice(0),savedAt:Date.now()});
+    findPhoto(ext,buf,S.cv.scanned&&S.cv.scanned.photo);
+    // garde aussi le texte lu d'un CV en image, pour ne pas le relire (et le décompter) à chaque visite
+    if(!restored||(S.cv.scanned&&!restored.ocr)) cvStore.save({name,type:f.type,buf:buf.slice(0),ocr:S.cv.scanned||null,savedAt:Date.now()});
     $("#cvSaved").hidden=false;
     if(S.offer.info) renderOffer();
   }catch(e){
     $("#dropSub").textContent="ou clique pour choisir un fichier .docx ou .pdf";
+    if(e&&e.code){ $("#dropTitle").textContent="Dépose ton CV ici"; $("#dropSub").textContent="ou clique pour choisir un fichier .docx ou .pdf"; fail("#cvMsg",e); return }
     show("#cvMsg",e&&e.message==="lib"?"Les outils de lecture de fichiers n'ont pas pu se charger. Recharge la page.":"Impossible de lire ce fichier. Vérifie qu'il s'ouvre bien dans Word ou un lecteur PDF.","err");
   }
+}
+
+/* CV en image : on envoie les pages (3 max) en JPEG à l'IA, qui transcrit le texte et repère la photo */
+async function renderPdfPage(pdf,n,maxW){
+  const page=await pdf.getPage(n), vp1=page.getViewport({scale:1}), sc=Math.min(3,maxW/vp1.width), vp=page.getViewport({scale:sc});
+  const c=document.createElement("canvas"); c.width=Math.round(vp.width); c.height=Math.round(vp.height);
+  const g=c.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,c.width,c.height);
+  await page.render({canvasContext:g,viewport:vp}).promise; return c;
+}
+async function readScannedPdf(buf){
+  $("#dropSub").textContent="CV en image : lecture du texte en cours…";
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0)),isEvalSupported:false}).promise;
+  const images=[];
+  for(let n=1;n<=Math.min(3,pdf.numPages);n++){const c=await renderPdfPage(pdf,n,1400);images.push(c.toDataURL("image/jpeg",0.82).split(",")[1])}
+  const r=await api("read_cv_image",{images});
+  if(!r||!r.text||r.text.trim().length<60) throw {code:"scan_unreadable"};
+  return {text:r.text,photo:r.photo||null};
+}
+async function photoFromBox(buf,box){
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0)),isEvalSupported:false}).promise;
+  const c=await renderPdfPage(pdf,1,1800);
+  const x=box.x0*c.width,y=box.y0*c.height,w=(box.x1-box.x0)*c.width,h=(box.y1-box.y0)*c.height;
+  if(w<40||h<40)return null;
+  const out=document.createElement("canvas"); out.width=Math.round(w); out.height=Math.round(h);
+  out.getContext("2d").drawImage(c,x,y,w,h,0,0,out.width,out.height);
+  return makePhoto(out,out.width,out.height,null);
 }
 
 /* ---------- Photo du CV ---------- */
@@ -599,12 +633,30 @@ async function pdfPhoto(buf){
   const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0)),isEvalSupported:false,useSystemFonts:true}).promise;
   const page=await pdf.getPage(1), ops=await page.getOperatorList();
   let r=null;
-  try{ r=await pdfPhotoObjects(page,ops) }catch(e){}
+  try{ r=await pdfPhotoObjects(page,ops,pdfImagePlacements(page,ops)) }catch(e){}
   if(!r){ try{ r=await pdfPhotoRendered(page,ops) }catch(e){} }
   return r;
 }
 /* Repère où chaque image est posée sur la page, puis découpe ce rectangle dans le rendu de la page.
    Marche aussi pour les photos masquées, détourées ou intégrées d'une façon que l'extraction directe ne lit pas. */
+/* Où chaque image est posée sur la page (rectangle en points), d'après les opérations de dessin */
+function pdfImagePlacements(page,ops){
+  const O=pdfjsLib.OPS, mul=(m,n)=>[m[0]*n[0]+m[2]*n[1],m[1]*n[0]+m[3]*n[1],m[0]*n[2]+m[2]*n[3],m[1]*n[2]+m[3]*n[3],m[0]*n[4]+m[2]*n[5]+m[4],m[1]*n[4]+m[3]*n[5]+m[5]];
+  const vp=page.getViewport({scale:1}); let ctm=[1,0,0,1,0,0]; const stack=[]; const out=[];
+  const IMG=new Set([O.paintImageXObject,O.paintInlineImageXObject,O.paintJpegXObject].filter(x=>x!==undefined));
+  ops.fnArray.forEach((fn,i)=>{const a=ops.argsArray[i];
+    if(fn===O.save)stack.push(ctm); else if(fn===O.restore)ctm=stack.pop()||[1,0,0,1,0,0];
+    else if(fn===O.transform)ctm=mul(ctm,a);
+    else if(fn===O.paintFormXObjectBegin){stack.push(ctm);if(a&&Array.isArray(a[0])&&a[0].length===6)ctm=mul(ctm,a[0])}
+    else if(fn===O.paintFormXObjectEnd)ctm=stack.pop()||[1,0,0,1,0,0];
+    else if(IMG.has(fn)){
+      const pts=[[0,0],[1,0],[0,1],[1,1]].map(([x,y])=>[ctm[0]*x+ctm[2]*y+ctm[4],ctm[1]*x+ctm[3]*y+ctm[5]]);
+      const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+      const [x1,y1,x2,y2]=vp.convertToViewportRectangle([Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]);
+      out.push({name:typeof (a&&a[0])==="string"?a[0]:null,x:Math.min(x1,x2),y:Math.min(y1,y2),w:Math.abs(x2-x1),h:Math.abs(y2-y1),pageArea:vp.width*vp.height});
+    }});
+  return out;
+}
 async function pdfPhotoRendered(page,ops){
   const O=pdfjsLib.OPS, mul=(m,n)=>[m[0]*n[0]+m[2]*n[1],m[1]*n[0]+m[3]*n[1],m[0]*n[2]+m[2]*n[3],m[1]*n[2]+m[3]*n[3],m[0]*n[4]+m[2]*n[5]+m[4],m[1]*n[4]+m[3]*n[5]+m[5]];
   const vp=page.getViewport({scale:1}); let ctm=[1,0,0,1,0,0]; const stack=[]; const rects=[];
@@ -639,13 +691,15 @@ async function pdfPhotoRendered(page,ops){
   out.getContext("2d").drawImage(cv,best.x*SC,best.y*SC,best.w*SC,best.h*SC,0,0,out.width,out.height);
   return makePhoto(out,out.width,out.height,null);
 }
-async function pdfPhotoObjects(page,ops){
+async function pdfPhotoObjects(page,ops,places){
   const O=pdfjsLib.OPS;
   const names=[];
   ops.fnArray.forEach((fn,i)=>{if(fn===O.paintImageXObject||fn===O.paintJpegXObject||fn===O.paintImageXObjectRepeat){const n=ops.argsArray[i][0];if(typeof n==="string"&&!names.includes(n))names.push(n)}});
   let best=null;
   for(let k=0;k<names.length;k++){
     const name=names[k];
+    // une image qui recouvre une grande partie de la page est un fond (ou un CV entièrement en image), pas une photo
+    const pl=(places||[]).find(p=>p.name===name); if(pl&&pl.w*pl.h>pl.pageArea*0.25)continue;
     const obj=await new Promise(res=>{
       const st=name.startsWith("g_")?page.commonObjs:page.objs; let done=false; const fin=v=>{if(!done){done=true;res(v)}};
       try{ if(st.has&&st.has(name)) fin(st.get(name)); else st.get(name,fin) }catch(e){fin(null)}
@@ -675,8 +729,8 @@ function renderPhotoRow(found){
   $("#photoHint").textContent=S.photo?(found==="upload"?"Photo ajoutée":"Récupérée depuis ton CV · recadrée automatiquement")
     :li?"LinkedIn ne fournit pas ta photo : ajoute-la ici si tu veux qu'elle figure sur ton CV.":"Aucune photo trouvée dans ton CV : tu peux l'ajouter ici.";
 }
-async function findPhoto(kind,buf){
-  try{ S.photo=kind==="docx"?await docxPhoto(buf):await pdfPhoto(buf) }catch(e){ S.photo=null }
+async function findPhoto(kind,buf,box){
+  try{ S.photo=kind==="docx"?await docxPhoto(buf):(box?await photoFromBox(buf,box):await pdfPhoto(buf)) }catch(e){ S.photo=null }
   renderPhotoRow("cv");
   if(S.cvData) await buildThemePdf();
 }

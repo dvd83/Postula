@@ -314,12 +314,12 @@ async def t_photo_pdf_avec_grands_aplats_de_couleur(b, base):
 
 
 async def t_photo_aplats_par_rendu_de_la_page(b, base):
-    await photo_from(b, base, "cv_photo_aplats.pdf", patch=[("try{ r=await pdfPhotoObjects(page,ops) }catch(e){}", "")])
+    await photo_from(b, base, "cv_photo_aplats.pdf", patch=[("try{ r=await pdfPhotoObjects(page,ops,pdfImagePlacements(page,ops)) }catch(e){}", "")])
 
 
 async def t_photo_pdf_par_rendu_de_la_page(b, base):
     # méthode de secours : extraction directe désactivée, la photo est découpée dans le rendu de la page
-    await photo_from(b, base, "cv_photo_rond.pdf", patch=[("try{ r=await pdfPhotoObjects(page,ops) }catch(e){}", "")])
+    await photo_from(b, base, "cv_photo_rond.pdf", patch=[("try{ r=await pdfPhotoObjects(page,ops,pdfImagePlacements(page,ops)) }catch(e){}", "")])
 
 
 async def t_photo_ajout_possible_sans_cv_fichier(b, base):
@@ -333,6 +333,41 @@ async def t_photo_ajout_possible_sans_cv_fichier(b, base):
         check(await c.page.is_visible("#photoRow"), "avec un profil collé, il faut pouvoir ajouter sa photo")
         await c.page.set_input_files("#photoFile", os.path.join(FIX, "portrait.jpg"))
         await c.page.wait_for_selector("#photoThumb img", timeout=5000)
+
+
+# ---------- CV entièrement en image (scan) ----------
+SCAN_TEXT = "Camille Rochat\nChef de projet digital\ncamille.rochat@example.ch\nEXPÉRIENCE\nChef de projet digital – Le Temps, Genève (2021 – aujourd'hui)\nPilotage de la refonte du site, animation Scrum, suivi SEO.\nFORMATION\nMaster en systèmes d'information – HEC Lausanne (2016)"
+
+
+async def scan_case(b, base, photo):
+    def read(body):
+        imgs = body.get("images") or []
+        check(len(imgs) == 1 and len(imgs[0]) > 20000, "la page du CV en image doit être envoyée à l'IA")
+        return {"text": SCAN_TEXT, "photo": photo}
+    async with Ctx(b, base, ai={"read_cv_image": read}) as c:
+        await c.open("#app")
+        await c.step(2)
+        await c.page.set_input_files("#cvFile", os.path.join(FIX, "cv_scan.pdf"))
+        await c.page.wait_for_selector("#photoRow:not([hidden])", timeout=15000)
+        await c.page.wait_for_timeout(300)
+        check("read_cv_image" in c.calls, "le CV en image n'a pas été lu")
+        check("image" in (await c.page.inner_text("#cvMsg")).lower(), "il faut prévenir que le CV était une image")
+        check(not await c.page.is_disabled("#adaptBtn"), "le CV en image doit pouvoir être adapté")
+        c.no_js_errors()
+        return c, await c.page.inner_text("#photoHint"), await c.page.evaluate("""async()=>{const i=document.querySelector('#photoThumb img');if(!i)return null;await i.decode();
+          const c=document.createElement('canvas');c.width=c.height=60;const g=c.getContext('2d');g.drawImage(i,0,0,60,60);
+          const d=g.getImageData(30,8,1,1).data;return [d[0],d[1],d[2]]}""")
+
+
+async def t_cv_scanne_lu_et_photo_reprise(b, base):
+    _, hint, rgb = await scan_case(b, base, {"x0": 0.714, "y0": 0.034, "x1": 0.905, "y1": 0.168})
+    # le portrait (visage clair sur fond bleu) et non un morceau blanc ou le bandeau marine
+    check("Récupérée" in hint and rgb and not all(v > 235 for v in rgb) and not (rgb[0] < 60 and rgb[1] < 60), f"photo du CV en image non reprise ({hint}, {rgb})")
+
+
+async def t_cv_scanne_page_entiere_pas_prise_pour_photo(b, base):
+    _, hint, rgb = await scan_case(b, base, None)
+    check("Récupérée" not in hint, "la page entière ne doit pas être prise pour la photo")
 
 
 # ---------- adaptation d'un CV Word produit par Postula ----------

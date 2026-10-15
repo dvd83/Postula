@@ -66,4 +66,8 @@ c.setFont("Helvetica-Bold", 22); c.drawString(20 * mm, H - 28 * mm, "Camille Roc
 for l in LINES[1:]:
     c.setFont("Helvetica-Bold" if l.isupper() else "Helvetica", 10); c.drawString(20 * mm, y, l); y -= 7 * mm
 c.save(); os.remove(b1); os.remove(b2)
+# 5) CV entièrement en image (scan / export « image ») : aucune ligne de texte dans le PDF
+subprocess.run(["pdftoppm", "-r", "110", "-png", "-singlefile", os.path.join(D, "cv_photo_rond.pdf"), os.path.join(D, "_scan")], check=True)
+Image.open(os.path.join(D, "_scan.png")).convert("RGB").save(os.path.join(D, "cv_scan.pdf"), resolution=110)
+os.remove(os.path.join(D, "_scan.png"))
 print("ok")
