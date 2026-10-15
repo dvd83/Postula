@@ -30,6 +30,9 @@ jobs:
       - name: Typage des fonctions serveur
         working-directory: supabase/functions
         run: deno check ai/index.ts claim-free/index.ts billing/index.ts stripe-webhook/index.ts
+      - name: Tests serveur (lecture des annonces)
+        working-directory: supabase/functions
+        run: deno test --allow-env tests/
 
       - name: Aucun secret dans le dépôt
         run: |
@@ -37,9 +40,34 @@ jobs:
             echo "::error::Un secret semble présent dans le front."; exit 1
           fi
 
+  e2e:
+    name: Tests du site (navigateur)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Installer Playwright
+        run: |
+          pip install playwright==1.48.0
+          python -m playwright install --with-deps chromium
+      - name: Lancer les tests
+        env:
+          SHOTS: e2e-results
+        run: python tests/e2e/run.py
+      - name: Garder captures et CV produits
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultats-tests
+          path: e2e-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   deploy-backend:
     name: Déploiement Supabase
-    needs: checks
+    needs: [checks, e2e]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
@@ -70,7 +98,7 @@ jobs:
 
   deploy-frontend:
     name: Déploiement du site (Cloudflare Pages)
-    needs: checks
+    needs: [checks, e2e]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:

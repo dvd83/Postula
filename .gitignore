@@ -4,3 +4,4 @@ supabase/.temp/
 supabase/.branches/
 .env
 .env.*
+e2e-results/

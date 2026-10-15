@@ -75,3 +75,12 @@ select u.email, c.cost_usd, c.events from public.user_cost_30d c join auth.users
 ## Mise en route
 
 Voir [docs/SETUP.md](docs/SETUP.md).
+
+## Tests automatiques
+
+À chaque envoi sur `main`, GitHub lance les tests avant toute mise en ligne ; si l'un échoue, le site n'est pas déployé.
+
+- `tests/e2e/run.py` : parcours réels dans un navigateur (lien jobup lu puis analysé, LinkedIn non lu, CV depuis un profil LinkedIn, PDF d'une page et Word pour chaque thème, garde-fou de la lettre, affichage mobile). Le serveur est simulé : aucun coût, aucune donnée réelle. Captures et CV produits : onglet *Actions* → run → *resultats-tests*.
+- `supabase/functions/tests/` : lecture des annonces depuis un lien (robots.txt, LinkedIn exclu, adresses refusées).
+
+En local : `python3 tests/e2e/run.py` et `cd supabase/functions && deno test --allow-env tests/`.
