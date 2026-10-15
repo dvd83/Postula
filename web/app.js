@@ -537,6 +537,18 @@ function makePhoto(src,sw,sh,crop){
   const h2=ci.getContext("2d"); h2.beginPath(); h2.arc(N/2,N/2,N/2,0,Math.PI*2); h2.closePath(); h2.clip(); h2.drawImage(sq,0,0);
   return {square:sq.toDataURL("image/jpeg",0.9),circle:ci.toDataURL("image/png")};
 }
+/* Niveau de détail d'une image (écart-type de la luminosité sur une vignette 40×40).
+   Une vraie photo varie beaucoup ; un aplat ou un dégradé décoratif (fréquent dans les CV Word) presque pas. */
+function imgDetail(src,sx,sy,sw,sh){
+  const c=document.createElement("canvas"); c.width=c.height=40; const g=c.getContext("2d",{willReadFrequently:true});
+  g.fillStyle="#fff"; g.fillRect(0,0,40,40);
+  try{ if(sw) g.drawImage(src,sx,sy,sw,sh,0,0,40,40); else g.drawImage(src,0,0,40,40) }catch(e){ return 0 }
+  const d=g.getImageData(0,0,40,40).data; let n=0,sum=0,sq=0,edges=0,prev=null;
+  for(let i=0;i<d.length;i+=4){const l=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];sum+=l;sq+=l*l;n++;if(prev!==null&&Math.abs(l-prev)>18)edges++;prev=l}
+  const m=sum/n, sd=Math.sqrt(Math.max(0,sq/n-m*m));
+  return sd*(0.5+Math.min(1,edges/120));
+}
+const detailFactor=dt=>dt<10?0:Math.min(1.6,dt/30);
 function photoScore(w,h,order){
   if(w<90||h<90)return -1;               // icônes
   const ar=w/h; if(ar<0.55||ar>1.6)return -1; // logos, bandeaux
@@ -576,7 +588,9 @@ async function docxPhoto(buf){
     try{
       const img=await blobImg(await f.async("blob"));
       const cr=c.crop||{l:0,t:0,r:0,b:0}, w=img.naturalWidth*(1-cr.l-cr.r), h=img.naturalHeight*(1-cr.t-cr.b);
-      const s=photoScore(w,h,c.order); if(s>0&&(!best||s>best.s))best={s,img,crop:cr};
+      let s=photoScore(w,h,c.order); if(s<=0)continue;
+      s*=detailFactor(imgDetail(img,img.naturalWidth*cr.l,img.naturalHeight*cr.t,w,h));
+      if(s>0&&(!best||s>best.s))best={s,img,crop:cr};
     }catch(e){}
   }
   return best?makePhoto(best.img,best.img.naturalWidth,best.img.naturalHeight,best.crop):null;
@@ -606,19 +620,21 @@ async function pdfPhotoRendered(page,ops){
       const [x1,y1,x2,y2]=vp.convertToViewportRectangle([Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]);
       rects.push({x:Math.min(x1,x2),y:Math.min(y1,y2),w:Math.abs(x2-x1),h:Math.abs(y2-y1),k:rects.length});
     }});
-  let best=null;
+  const cand=[];
   for(const r of rects){
     const x=Math.max(0,r.x),y=Math.max(0,r.y),w=Math.min(vp.width,r.x+r.w)-x,h=Math.min(vp.height,r.y+r.h)-y;
     if(w<34||h<34)continue;                                  // moins d'environ 12 mm : icône
     const ar=w/h; if(ar<0.55||ar>1.6)continue;
     if(w*h>vp.width*vp.height*0.25)continue;                 // fond de page
-    const s=w*h*(y<vp.height*0.4?1.5:1)*(ar<=1.05?1.2:1);
-    if(!best||s>best.s)best={s,x,y,w,h};
+    cand.push({s:w*h*(y<vp.height*0.4?1.5:1)*(ar<=1.05?1.2:1),x,y,w,h});
   }
-  if(!best)return null;
+  if(!cand.length)return null;
   const SC=3, cv=document.createElement("canvas"); cv.width=Math.ceil(vp.width*SC); cv.height=Math.ceil(vp.height*SC);
   const g=cv.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,cv.width,cv.height);
   await page.render({canvasContext:g,viewport:page.getViewport({scale:SC})}).promise;
+  let best=null;
+  for(const c of cand){ const s=c.s*detailFactor(imgDetail(cv,c.x*SC,c.y*SC,c.w*SC,c.h*SC)); if(s>0&&(!best||s>best.s))best={...c,s} }
+  if(!best)return null;
   const out=document.createElement("canvas"); out.width=Math.round(best.w*SC); out.height=Math.round(best.h*SC);
   out.getContext("2d").drawImage(cv,best.x*SC,best.y*SC,best.w*SC,best.h*SC,0,0,out.width,out.height);
   return makePhoto(out,out.width,out.height,null);
@@ -637,7 +653,7 @@ async function pdfPhotoObjects(page,ops){
     });
     if(!obj)continue;
     const w=obj.width||(obj.bitmap&&obj.bitmap.width), h=obj.height||(obj.bitmap&&obj.bitmap.height);
-    const s=photoScore(w,h,k); if(s<=0||(best&&s<=best.s))continue;
+    let s=photoScore(w,h,k); if(s<=0)continue;
     const c=document.createElement("canvas"); c.width=w;c.height=h; const g=c.getContext("2d");
     if(obj.bitmap){g.drawImage(obj.bitmap,0,0)}
     else if(obj.data&&(obj.kind===2||obj.kind===3)){
@@ -646,6 +662,7 @@ async function pdfPhotoObjects(page,ops){
       else for(let i=0,j=0;j<out.length;i+=3,j+=4){out[j]=d[i];out[j+1]=d[i+1];out[j+2]=d[i+2];out[j+3]=255}
       g.putImageData(id,0,0);
     }else continue;
+    s*=detailFactor(imgDetail(c)); if(s<=0||(best&&s<=best.s))continue;
     best={s,c,w,h};
   }
   return best?makePhoto(best.c,best.w,best.h,null):null;

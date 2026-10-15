@@ -53,4 +53,17 @@ c.setFillColorRGB(0, 0, 0); y = H - 75 * mm
 for l in LINES[2:]:
     c.setFont("Helvetica-Bold" if l.isupper() else "Helvetica", 10); c.drawString(20 * mm, y, l); y -= 7 * mm
 c.save()
+# 4) PDF façon modèle Word : grands aplats/dégradés de couleur enregistrés comme images, plus gros que la photo
+blk1 = Image.new("RGB", (440, 754)); g1 = ImageDraw.Draw(blk1)
+for y in range(754):
+    g1.line([(0, y), (440, y)], fill=(70, 140 + y // 40, 190))
+blk2 = Image.new("RGB", (425, 580), (75, 145, 195))
+b1, b2 = os.path.join(D, "_blk1.png"), os.path.join(D, "_blk2.png"); blk1.save(b1); blk2.save(b2)
+c = canvas.Canvas(os.path.join(D, "cv_photo_aplats.pdf"), pagesize=A4)
+c.drawImage(b1, 135 * mm, 20 * mm, 60 * mm, 103 * mm); c.drawImage(b2, 135 * mm, 130 * mm, 58 * mm, 79 * mm)
+c.drawImage(photo, 150 * mm, H - 48 * mm, 38 * mm, 40 * mm)
+c.setFont("Helvetica-Bold", 22); c.drawString(20 * mm, H - 28 * mm, "Camille Rochat"); y = H - 60 * mm
+for l in LINES[1:]:
+    c.setFont("Helvetica-Bold" if l.isupper() else "Helvetica", 10); c.drawString(20 * mm, y, l); y -= 7 * mm
+c.save(); os.remove(b1); os.remove(b2)
 print("ok")

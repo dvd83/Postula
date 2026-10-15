@@ -219,9 +219,13 @@ async def cv_exports(b, base, cv, tag, max_pages):
         await c.page.fill("#profileText", "Camille Rochat\nChef de projet digital\nExpérience\nLe Temps\n" * 6)
         await c.page.click("#useProfile")
         await c.page.wait_for_timeout(300)
-        check(not await c.page.is_disabled("#themeBtn"), "le profil LinkedIn collé n'a pas été accepté")
-        await c.page.click("#themeBtn")
-        await c.page.wait_for_selector("#dlThemeDocx:not([hidden])", timeout=8000)
+        check("LinkedIn" in await c.page.inner_text("#dropTitle"), "le profil LinkedIn collé n'a pas été accepté")
+        # l'offre étant analysée, la mise en forme démarre toute seule ; sinon on la lance
+        try:
+            await c.page.wait_for_selector("#dlThemeDocx:not([hidden])", timeout=4000)
+        except Exception:
+            await c.page.click("#themeBtn")
+            await c.page.wait_for_selector("#dlThemeDocx:not([hidden])", timeout=8000)
         names = await c.page.eval_on_selector_all(".theme span", "els=>els.map(e=>e.textContent)")
         check(len(names) >= 4, "thèmes manquants")
         for name in names:
@@ -296,6 +300,15 @@ async def t_photo_pdf_exporte_de_word(b, base):
 
 async def t_photo_pdf_decoupee_en_rond(b, base):
     await photo_from(b, base, "cv_photo_rond.pdf")
+
+
+async def t_photo_pdf_avec_grands_aplats_de_couleur(b, base):
+    # les blocs décoratifs (images unies plus grandes que la photo) ne doivent pas être pris pour la photo
+    await photo_from(b, base, "cv_photo_aplats.pdf")
+
+
+async def t_photo_aplats_par_rendu_de_la_page(b, base):
+    await photo_from(b, base, "cv_photo_aplats.pdf", patch=[("try{ r=await pdfPhotoObjects(page,ops) }catch(e){}", "")])
 
 
 async def t_photo_pdf_par_rendu_de_la_page(b, base):
