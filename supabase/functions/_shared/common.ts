@@ -111,14 +111,23 @@ export async function llm(opts: {
 }): Promise<LlmResult> {
   const key = Deno.env.get("ANTHROPIC_API_KEY");
   if (!key) throw new AppError("server_not_configured", 500);
+  // Les modèles récents réfléchissent d'eux-mêmes (réflexion adaptative) et cette réflexion compte dans max_tokens.
+  // On demande un effort faible (réponses directes, plus rapides) et on garde une marge pour la réflexion,
+  // sinon la limite peut être atteinte avant le moindre mot de réponse.
+  const room = (n: number) => Math.min(32000, n + 4000);
   const base: Record<string, unknown> = {
-    model: MODEL[opts.tier], max_tokens: opts.maxTokens,
+    model: MODEL[opts.tier], max_tokens: room(opts.maxTokens),
     ...(opts.system ? { system: opts.system } : {}),
     messages: opts.messages,
   };
-  // Réponses directes : sans réflexion préalable, toute la limite de jetons sert au texte
-  let r = await callAnthropic(key, { ...base, thinking: { type: "disabled" } });
-  if (!r.ok && r.status === 400 && /thinking/i.test(r.raw)) r = await callAnthropic(key, base);
+  let withEffort = true;
+  const call = (extra: Record<string, unknown> = {}) =>
+    callAnthropic(key, { ...base, ...(withEffort ? { output_config: { effort: "low" } } : {}), ...extra });
+  let r = await call();
+  if (!r.ok && r.status === 400 && /effort|output_config/i.test(r.raw)) {
+    console.error("anthropic_effort_refused", r.raw.slice(0, 300));
+    withEffort = false; r = await call();
+  }
   if (!r.ok) {
     console.error("anthropic", r.status, r.raw.slice(0, 600));
     throw new AppError(r.status === 429 || r.status === 529 ? "ai_busy" : "ai_error", 502);
@@ -133,11 +142,12 @@ export async function llm(opts: {
   };
   let text = read(r.data);
   if (!text) {
-    // Réponse vide (limite atteinte pendant la réflexion, ou refus) : un seul nouvel essai, avec plus de marge
-    console.error("anthropic_empty", r.data.stop_reason, JSON.stringify((r.data.content ?? []).map((c: { type: string }) => c.type)));
+    // Réponse vide (limite atteinte pendant la réflexion, ou refus) : un nouvel essai avec beaucoup plus de marge
+    console.error("anthropic_empty", r.data.stop_reason, JSON.stringify((r.data.content ?? []).map((c: { type: string }) => c.type)), JSON.stringify(r.data.usage ?? {}));
     if (r.data.stop_reason === "refusal") throw new AppError("ai_refused", 422);
-    const retry = await callAnthropic(key, { ...base, max_tokens: Math.max(opts.maxTokens * 3, 1500), thinking: { type: "disabled" } });
+    const retry = await call({ max_tokens: Math.min(32000, room(opts.maxTokens) * 2) });
     if (retry.ok) text = read(retry.data);
+    else console.error("anthropic_retry", retry.status, retry.raw.slice(0, 300));
     if (!text) throw new AppError("ai_empty", 502);
   }
   return { text, cost };
