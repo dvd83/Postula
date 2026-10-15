@@ -463,6 +463,7 @@ function useProfileText(text,restored){
   S.cv={kind:"text",name:"Profil LinkedIn",text:text.slice(0,40000)};
   $("#dropTitle").textContent="Profil LinkedIn"; $("#dropSub").textContent="Texte collé · mis en forme avec le thème choisi ci-dessous";
   $("#adaptBtn").disabled=false; $("#themeBtn").disabled=false; $("#cvSaved").hidden=false; $("#liAlt").open=false;
+  renderPhotoRow("none");
   setViews({},null); $("#viewer").innerHTML='<div class="empty"><span class="sheet-ghost" aria-hidden="true"></span>Ton CV apparaîtra ici une fois mis en forme.</div>';
   if(!restored) cvStore.save({name:"Profil LinkedIn",kind:"text",text:S.cv.text,savedAt:Date.now()});
   updateKw(); if(S.offer.info) renderOffer();
@@ -557,7 +558,8 @@ async function docxPhoto(buf){
       const f=a=>sr&&sr.getAttribute(a)?Math.max(0,Math.min(0.9,parseInt(sr.getAttribute(a),10)/100000)):0;
       refs.push({id,crop:{l:f("l"),t:f("t"),r:f("r"),b:f("b")}});
     });
-    [...dom.getElementsByTagNameNS(NS_V,"imagedata")].forEach(v=>{const id=v.getAttributeNS(NS_R,"id");if(id)refs.push({id,crop:null})});
+    // anciennes images Word (VML) : image simple ou forme remplie par une photo (souvent ronde)
+    [...dom.getElementsByTagNameNS(NS_V,"imagedata"),...dom.getElementsByTagNameNS(NS_V,"fill")].forEach(v=>{const id=v.getAttributeNS(NS_R,"id");if(id)refs.push({id,crop:null})});
     refs.forEach(r=>{
       const t=map[r.id]; if(!t||/^https?:/i.test(t))return;
       const path=("word/"+t).replace(/word\/\.\.\//,"").replace(/^\/+/,"");
@@ -565,7 +567,8 @@ async function docxPhoto(buf){
       cands.push({path,crop:r.crop,order:cands.length});
     });
   }
-  if(!cands.length) Object.keys(zip.files).filter(n=>/^word\/media\//.test(n)).forEach((p,i)=>cands.push({path:p,crop:null,order:i+1}));
+  // en plus, toutes les images du fichier (photo insérée d'une façon non prévue) : moins prioritaires
+  Object.keys(zip.files).filter(n=>/^word\/media\//.test(n)&&!cands.some(c=>c.path===n)).forEach(p=>cands.push({path:p,crop:null,order:cands.length+1}));
   let best=null;
   for(const c of cands){
     if(!/\.(jpe?g|png|gif|bmp|webp)$/i.test(c.path))continue;
@@ -580,7 +583,48 @@ async function docxPhoto(buf){
 }
 async function pdfPhoto(buf){
   const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf.slice(0)),isEvalSupported:false,useSystemFonts:true}).promise;
-  const page=await pdf.getPage(1), ops=await page.getOperatorList(), O=pdfjsLib.OPS;
+  const page=await pdf.getPage(1), ops=await page.getOperatorList();
+  let r=null;
+  try{ r=await pdfPhotoObjects(page,ops) }catch(e){}
+  if(!r){ try{ r=await pdfPhotoRendered(page,ops) }catch(e){} }
+  return r;
+}
+/* Repère où chaque image est posée sur la page, puis découpe ce rectangle dans le rendu de la page.
+   Marche aussi pour les photos masquées, détourées ou intégrées d'une façon que l'extraction directe ne lit pas. */
+async function pdfPhotoRendered(page,ops){
+  const O=pdfjsLib.OPS, mul=(m,n)=>[m[0]*n[0]+m[2]*n[1],m[1]*n[0]+m[3]*n[1],m[0]*n[2]+m[2]*n[3],m[1]*n[2]+m[3]*n[3],m[0]*n[4]+m[2]*n[5]+m[4],m[1]*n[4]+m[3]*n[5]+m[5]];
+  const vp=page.getViewport({scale:1}); let ctm=[1,0,0,1,0,0]; const stack=[]; const rects=[];
+  const IMG=new Set([O.paintImageXObject,O.paintInlineImageXObject,O.paintJpegXObject].filter(x=>x!==undefined));
+  ops.fnArray.forEach((fn,i)=>{const a=ops.argsArray[i];
+    if(fn===O.save)stack.push(ctm); else if(fn===O.restore)ctm=stack.pop()||[1,0,0,1,0,0];
+    else if(fn===O.transform)ctm=mul(ctm,a);
+    else if(fn===O.paintFormXObjectBegin){stack.push(ctm);if(a&&Array.isArray(a[0])&&a[0].length===6)ctm=mul(ctm,a[0])}
+    else if(fn===O.paintFormXObjectEnd)ctm=stack.pop()||[1,0,0,1,0,0];
+    else if(IMG.has(fn)){
+      const pts=[[0,0],[1,0],[0,1],[1,1]].map(([x,y])=>[ctm[0]*x+ctm[2]*y+ctm[4],ctm[1]*x+ctm[3]*y+ctm[5]]);
+      const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+      const [x1,y1,x2,y2]=vp.convertToViewportRectangle([Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]);
+      rects.push({x:Math.min(x1,x2),y:Math.min(y1,y2),w:Math.abs(x2-x1),h:Math.abs(y2-y1),k:rects.length});
+    }});
+  let best=null;
+  for(const r of rects){
+    const x=Math.max(0,r.x),y=Math.max(0,r.y),w=Math.min(vp.width,r.x+r.w)-x,h=Math.min(vp.height,r.y+r.h)-y;
+    if(w<34||h<34)continue;                                  // moins d'environ 12 mm : icône
+    const ar=w/h; if(ar<0.55||ar>1.6)continue;
+    if(w*h>vp.width*vp.height*0.25)continue;                 // fond de page
+    const s=w*h*(y<vp.height*0.4?1.5:1)*(ar<=1.05?1.2:1);
+    if(!best||s>best.s)best={s,x,y,w,h};
+  }
+  if(!best)return null;
+  const SC=3, cv=document.createElement("canvas"); cv.width=Math.ceil(vp.width*SC); cv.height=Math.ceil(vp.height*SC);
+  const g=cv.getContext("2d"); g.fillStyle="#fff"; g.fillRect(0,0,cv.width,cv.height);
+  await page.render({canvasContext:g,viewport:page.getViewport({scale:SC})}).promise;
+  const out=document.createElement("canvas"); out.width=Math.round(best.w*SC); out.height=Math.round(best.h*SC);
+  out.getContext("2d").drawImage(cv,best.x*SC,best.y*SC,best.w*SC,best.h*SC,0,0,out.width,out.height);
+  return makePhoto(out,out.width,out.height,null);
+}
+async function pdfPhotoObjects(page,ops){
+  const O=pdfjsLib.OPS;
   const names=[];
   ops.fnArray.forEach((fn,i)=>{if(fn===O.paintImageXObject||fn===O.paintJpegXObject||fn===O.paintImageXObjectRepeat){const n=ops.argsArray[i][0];if(typeof n==="string"&&!names.includes(n))names.push(n)}});
   let best=null;
@@ -610,7 +654,9 @@ function renderPhotoRow(found){
   const row=$("#photoRow"), th=$("#photoThumb"); row.hidden=false;
   if(S.photo){th.innerHTML=`<img alt="Photo du CV" src="${S.photo.circle}">`;$("#usePhoto").disabled=false;$("#photoBtnLabel").textContent="Changer la photo"}
   else{th.textContent="Photo";$("#usePhoto").disabled=true;$("#photoBtnLabel").textContent="Ajouter une photo"}
-  $("#photoHint").textContent=S.photo?(found==="upload"?"Photo ajoutée":"Récupérée depuis ton CV · recadrée automatiquement"):"Aucune photo trouvée dans ton CV.";
+  const li=S.cv&&(S.cv.kind==="text"||/linkedin\.com\/in\//i.test(S.cv.text||""));
+  $("#photoHint").textContent=S.photo?(found==="upload"?"Photo ajoutée":"Récupérée depuis ton CV · recadrée automatiquement")
+    :li?"LinkedIn ne fournit pas ta photo : ajoute-la ici si tu veux qu'elle figure sur ton CV.":"Aucune photo trouvée dans ton CV : tu peux l'ajouter ici.";
 }
 async function findPhoto(kind,buf){
   try{ S.photo=kind==="docx"?await docxPhoto(buf):await pdfPhoto(buf) }catch(e){ S.photo=null }

@@ -63,8 +63,8 @@ def serve():
 
 class Ctx:
     """Un onglet isolé avec serveur simulé ; garde la trace des appels et des erreurs JavaScript."""
-    def __init__(self, browser, base, width=1280, height=900, ai=None):
-        self.browser, self.base, self.size, self.ai = browser, base, (width, height), ai or {}
+    def __init__(self, browser, base, width=1280, height=900, ai=None, patch=None):
+        self.browser, self.base, self.size, self.ai, self.patch = browser, base, (width, height), ai or {}, patch
         self.calls, self.errors = [], []
 
     async def __aenter__(self):
@@ -85,6 +85,10 @@ class Ctx:
             return await r.fulfill(path=os.path.join(LIB_DIR, "jspdf.umd.min.js"), content_type="application/javascript")
         if LIB_DIR and "jszip" in u:
             return await r.fulfill(path=os.path.join(LIB_DIR, "jszip.min.js"), content_type="application/javascript")
+        if LIB_DIR and "pdf.worker" in u:
+            return await r.fulfill(path=os.path.join(LIB_DIR, "pdfjs", "build", "pdf.worker.js"), content_type="application/javascript")
+        if LIB_DIR and "pdf.js/" in u and "pdf.min.js" in u:
+            return await r.fulfill(path=os.path.join(LIB_DIR, "pdfjs", "build", "pdf.js"), content_type="application/javascript")
         if "/functions/v1/ai" in u:
             body = json.loads(r.request.post_data or "{}")
             act = body.get("action")
@@ -93,6 +97,12 @@ class Ctx:
             if isinstance(res, dict) and "error" in res:
                 return await r.fulfill(status=422, content_type="application/json", body=json.dumps(res))
             return await r.fulfill(content_type="application/json", body=json.dumps({"ok": True, "result": res}))
+        if self.patch and u.startswith(self.base) and u.split("?")[0].endswith("/app.js"):
+            js = open(os.path.join(ROOT, "app.js"), encoding="utf-8").read()
+            for old, new in self.patch:
+                check(old in js, f"correctif de test introuvable dans app.js : {old}")
+                js = js.replace(old, new)
+            return await r.fulfill(content_type="application/javascript", body=js)
         if u.startswith(self.base):
             return await r.continue_()
         if any(h in u for h in ("cdn.jsdelivr.net", "cdnjs.cloudflare.com")) and not LIB_DIR:
@@ -114,7 +124,7 @@ class Ctx:
             await self.page.screenshot(path=os.path.join(SHOTS, name + ".png"))
 
     def no_js_errors(self):
-        errs = [e for e in self.errors if "pdfjsLib" not in e and "docx" not in e.lower()] if LIB_DIR else self.errors
+        errs = [e for e in self.errors if "docx" not in e.lower()] if LIB_DIR else self.errors
         assert not errs, "Erreurs JavaScript : " + " | ".join(errs[:3])
 
 
@@ -253,6 +263,57 @@ async def t_lettre_demande_un_parcours(b, base):
         await c.page.wait_for_timeout(800)
         check("letter" in c.calls, "avec des notes suffisantes, la lettre doit être demandée")
         c.no_js_errors()
+
+
+FIX = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "fixtures"))
+
+
+async def photo_from(b, base, fname, patch=None):
+    async with Ctx(b, base, patch=patch) as c:
+        await c.open("#app")
+        await c.step(2)
+        await c.page.set_input_files("#cvFile", os.path.join(FIX, fname))
+        await c.page.wait_for_selector("#photoRow:not([hidden])", timeout=15000)
+        await c.page.wait_for_timeout(300)
+        hint = await c.page.inner_text("#photoHint")
+        await c.shot("photo_" + fname.replace(".", "_"))
+        check("Récupérée" in hint, f"{fname} : photo non récupérée (« {hint} »)")
+        # la vignette doit être le portrait (fond bleu), pas le petit logo rouge
+        rgb = await c.page.evaluate("""async()=>{const i=document.querySelector('#photoThumb img');await i.decode();
+          const c=document.createElement('canvas');c.width=c.height=60;const g=c.getContext('2d');g.drawImage(i,0,0,60,60);
+          const d=g.getImageData(30,8,1,1).data;return [d[0],d[1],d[2]]}""")
+        check(rgb[2] > rgb[0] + 40, f"{fname} : la photo retenue n'est pas le portrait (couleur {rgb})")
+        c.no_js_errors()
+
+
+async def t_photo_word(b, base):
+    await photo_from(b, base, "cv_photo.docx")
+
+
+async def t_photo_pdf_exporte_de_word(b, base):
+    await photo_from(b, base, "cv_photo_word.pdf")
+
+
+async def t_photo_pdf_decoupee_en_rond(b, base):
+    await photo_from(b, base, "cv_photo_rond.pdf")
+
+
+async def t_photo_pdf_par_rendu_de_la_page(b, base):
+    # méthode de secours : extraction directe désactivée, la photo est découpée dans le rendu de la page
+    await photo_from(b, base, "cv_photo_rond.pdf", patch=[("try{ r=await pdfPhotoObjects(page,ops) }catch(e){}", "")])
+
+
+async def t_photo_ajout_possible_sans_cv_fichier(b, base):
+    async with Ctx(b, base) as c:
+        await c.open("#app")
+        await c.step(2)
+        await c.page.click("#liAlt summary")
+        await c.page.fill("#profileText", "Camille Rochat\nChef de projet digital\nExpérience\nLe Temps\n" * 6)
+        await c.page.click("#useProfile")
+        await c.page.wait_for_timeout(300)
+        check(await c.page.is_visible("#photoRow"), "avec un profil collé, il faut pouvoir ajouter sa photo")
+        await c.page.set_input_files("#photoFile", os.path.join(FIX, "portrait.jpg"))
+        await c.page.wait_for_selector("#photoThumb img", timeout=5000)
 
 
 TESTS = [v for k, v in list(globals().items()) if k.startswith("t_")]
