@@ -87,7 +87,7 @@ p{margin:0}
 label{font-family:var(--f-display);font-weight:600;font-size:14px;display:block;margin-bottom:7px;color:var(--ink)}
 
 /* ---------- Contrôles ---------- */
-input[type=text],input[type=url],textarea,select{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:var(--r-ctl);padding:11px 13px;transition:border-color .15s,background .15s,box-shadow .15s}
+input[type=text],input[type=url],input[type=search],textarea,select{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:var(--r-ctl);padding:11px 13px;transition:border-color .15s,background .15s,box-shadow .15s}
 input:hover,textarea:hover,select:hover{border-color:var(--line-2)}
 input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);background:var(--sheet);box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 18%,transparent)}
 textarea{resize:vertical;min-height:120px;line-height:1.55}
@@ -441,3 +441,32 @@ section[data-step].enter{animation:stepin .32s var(--ease)}
   .recruiter > .row .btn{padding:7px 12px;font-size:13.5px;min-height:0}
   .transcript{max-height:42vh;min-height:120px}
 }
+
+/* Administration */
+.adm main{padding-top:24px;padding-bottom:60px}
+.adm-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.adm-head h1,.adm-head h2{margin:0}
+.adm-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.adm-tile{display:flex;flex-direction:column;gap:4px;padding:16px 18px}
+.adm-tile span{font-size:13px;color:var(--ink-2)}
+.adm-tile b{font-family:var(--f-display);font-size:26px;letter-spacing:-.02em}
+.adm-tile small{font-size:12.5px;color:var(--ink-2)}
+.adm-list{display:flex;flex-direction:column}
+.adm-user{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:14px;align-items:center;padding:14px 0;border-top:1px solid var(--line)}
+.adm-user:first-child{border-top:0}
+.adm-user .who b{display:block}
+.adm-user small{display:block;font-size:13px;color:var(--ink-2);overflow-wrap:anywhere}
+.adm-user .note{margin-top:4px}
+.adm-user .use{text-align:right;font-size:14px}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.pill.mark{background:var(--marker);color:var(--marker-ink);border-color:transparent}
+.pill.bad{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger);border-color:transparent}
+.adm-log{display:flex;flex-direction:column;gap:6px;font-size:14px}
+.adm-dlg{width:min(620px,calc(100vw - 24px));max-height:calc(100dvh - 24px);border:1px solid var(--line);border-radius:var(--r-panel);background:var(--sheet);color:var(--ink);padding:20px;box-shadow:var(--shadow-float)}
+.adm-dlg::backdrop{background:rgba(10,14,25,.45)}
+.adm-dlg fieldset{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:0}
+.adm-dlg legend{font-family:var(--f-display);font-weight:700;padding:0 6px}
+.adm-dlg select{width:auto;flex:1 1 140px}
+.adm-info{display:flex;flex-direction:column;gap:6px}
+@media (max-width:640px){.adm-user{grid-template-columns:1fr auto}.adm-user .use{grid-column:1;text-align:left}.adm-user .btn{grid-row:1;grid-column:2}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}

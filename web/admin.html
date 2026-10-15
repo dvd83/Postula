@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Administration · Postula</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Schibsted+Grotesk:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="adm">
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="brand" href="./" aria-label="Postula, accueil"><span class="mark" aria-hidden="true"><b>P</b></span><span class="name">Postula</span></a>
+    <span class="pill">Administration</span>
+    <a class="btn sm" href="./#app">Retour à Postula</a>
+  </div>
+</header>
+<main class="wrap stack" id="adm">
+  <div id="gate" class="card stack"><p class="lede"><span class="spinner"></span> Vérification de l'accès…</p></div>
+
+  <section id="panel" class="stack" hidden>
+    <div class="adm-head"><h1>Tableau de bord</h1><button class="btn sm ghost" id="reload" type="button">Actualiser</button></div>
+    <div class="adm-stats" id="stats"></div>
+
+    <div class="card stack">
+      <div class="adm-head"><h2>Comptes</h2><span class="pill" id="total"></span></div>
+      <label class="sr" for="q">Rechercher</label>
+      <input id="q" type="search" placeholder="Rechercher par e-mail ou nom…" autocomplete="off">
+      <div class="adm-list" id="users"></div>
+      <div class="row" style="justify-content:center"><button class="btn sm" id="more" type="button" hidden>Afficher plus</button></div>
+    </div>
+
+    <div class="card stack">
+      <h2>Dernières actions admin</h2>
+      <div id="log" class="adm-log"></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg" class="adm-dlg" aria-labelledby="dlgTitle">
+  <form method="dialog" class="stack">
+    <div class="adm-head"><h2 id="dlgTitle"></h2><button class="btn sm ghost" value="close" aria-label="Fermer">Fermer</button></div>
+    <div id="dlgInfo" class="adm-info"></div>
+
+    <fieldset class="stack"><legend>Offrir un abonnement</legend>
+      <div class="row">
+        <select id="gPlan" aria-label="Offre"><option value="monthly">Mensuel</option><option value="pass3m">Pass 3 mois</option></select>
+        <select id="gDays" aria-label="Durée"><option value="7">7 jours</option><option value="30" selected>1 mois</option><option value="90">3 mois</option><option value="180">6 mois</option><option value="365">1 an</option><option value="3650">10 ans (illimité)</option></select>
+        <button class="btn primary" type="button" data-act="grant">Offrir</button>
+      </div>
+      <div class="hint" style="margin:0">Remplace l'offre actuelle à partir d'aujourd'hui. Aucun paiement, l'utilisateur voit « offert ».</div>
+    </fieldset>
+
+    <fieldset class="stack"><legend>Ajuster</legend>
+      <div class="row">
+        <button class="btn sm" type="button" data-act="extra" data-n="5">+5 entretiens</button>
+        <button class="btn sm" type="button" data-act="extra" data-n="10">+10 entretiens</button>
+        <button class="btn sm" type="button" data-act="extra" data-n="-5">−5 entretiens</button>
+        <button class="btn sm" type="button" data-act="free" id="bFree">Débloquer la Découverte</button>
+        <button class="btn sm" type="button" data-act="revoke" id="bRevoke">Retirer l'offre</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="stack"><legend>Accès</legend>
+      <div class="row">
+        <button class="btn sm" type="button" data-act="block" id="bBlock">Bloquer</button>
+        <button class="btn sm" type="button" data-act="admin" id="bAdmin">Rendre admin</button>
+      </div>
+    </fieldset>
+
+    <fieldset class="stack"><legend>Note interne</legend>
+      <textarea id="note" rows="2" maxlength="1000" placeholder="Visible seulement ici (ex. : ami, testeur, partenaire…)"></textarea>
+      <div class="row"><button class="btn sm" type="button" data-act="note">Enregistrer la note</button></div>
+    </fieldset>
+    <div id="dlgMsg"></div>
+  </form>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

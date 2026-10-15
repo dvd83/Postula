@@ -113,7 +113,8 @@ async function refreshAccount(){
   const {data,error}=await sb.rpc("my_quota");
   if(error||!data)return;
   account=data;
-  const plan={free:"Découverte",monthly:"Mensuel",pass3m:"Pass 3 mois"}[data.plan]||data.plan;
+  const plan=(data.admin?"Admin":({free:"Découverte",monthly:"Mensuel",pass3m:"Pass 3 mois"}[data.plan]||data.plan))+(data.gift&&!data.admin?" offert":"");
+  $("#adminLink").hidden=!data.admin;
   $("#accPlan").textContent=plan;
   const q=data.quota||{}, left=k=>Math.max(0,(q[k]?.limit||0)-(q[k]?.used||0));
   $("#accQuota").innerHTML=["cv","letter","interview"].map(k=>{const n=left(k)+(k==="interview"?data.extra_interviews:0);return `<span title="${KIND_LABEL[k]} restants">${n} ${({cv:"CV",letter:n>1?"lettres":"lettre",interview:n>1?"entretiens":"entretien"})[k]}</span>`}).join("<span aria-hidden='true'>·</span>");
@@ -121,6 +122,7 @@ async function refreshAccount(){
   $("#manageSub").hidden=!data.customer;
   const until=data.period_end?new Date(data.period_end).toLocaleDateString("fr-CH"):"";
   const extra=data.plan!=="free"&&until?(data.active?(data.subscription?`renouvellement le ${until}`:`jusqu'au ${until}`):"expiré"):"";
+  if(data.admin){$("#accPlan").innerHTML=`${esc(plan)}<span class="long"> · illimité</span>`;$("#accPlan").classList.remove("miss");$("#accQuota").innerHTML="<span>Aucune limite</span>";return}
   $("#accPlan").innerHTML=esc(plan)+(extra?(data.active?`<span class="long"> · ${esc(extra)}</span>`:` · ${esc(extra)}`):"");
   $("#accPlan").classList.toggle("miss",data.plan!=="free"&&!data.active);
 }

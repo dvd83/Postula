@@ -92,6 +92,15 @@ class Ctx:
             return await r.fulfill(path=os.path.join(LIB_DIR, "pdfjs", "build", "pdf.worker.js"), content_type="application/javascript")
         if LIB_DIR and "pdf.js/" in u and "pdf.min.js" in u:
             return await r.fulfill(path=os.path.join(LIB_DIR, "pdfjs", "build", "pdf.js"), content_type="application/javascript")
+        if "/functions/v1/admin" in u:
+            body = json.loads(r.request.post_data or "{}")
+            self.calls.append("admin:" + body.get("action", "")); self.bodies.append(body)
+            res = self.ai.get("admin:" + body.get("action", ""), {"ok": True})
+            if callable(res):
+                res = res(body)
+            if isinstance(res, dict) and "error" in res:
+                return await r.fulfill(status=403, content_type="application/json", body=json.dumps(res))
+            return await r.fulfill(content_type="application/json", body=json.dumps({"ok": True, "result": res}))
         if "/functions/v1/ai" in u:
             body = json.loads(r.request.post_data or "{}")
             act = body.get("action")
@@ -487,6 +496,44 @@ async def t_entretien_micro_refuse_explique(b, base):
         await c.page.wait_for_selector('#voicePanel[data-mode="error"]', timeout=5000)
         check("autorise" in (await c.page.inner_text("#micHint")).lower(), "il faut expliquer comment autoriser le micro")
         check(not await c.page.is_disabled("#answerBox"), "on doit pouvoir répondre par écrit")
+
+
+# ---------- administration ----------
+ADM_STATS = {"users": 5, "new_7d": 5, "free_claimed": 5, "active_monthly": 1, "active_pass3m": 0, "active_gift": 0, "blocked": 1,
+             "uses_30d": {"cv": 13, "letter": 7, "interview": 5, "analyze": 18}, "cost_30d": 1.1, "cost_today": 0.49,
+             "cost_free_today": 0.06, "free_daily_budget": 30, "log": []}
+ADM_USERS = {"total": 2, "users": [
+    {"id": "11111111-1111-1111-1111-111111111111", "email": "ami@example.ch", "name": "Ami Testeur", "created_at": "2026-10-14T10:00:00Z",
+     "plan": "free", "period_end": None, "extra_interviews": 0, "free_claimed_at": None, "blocked": False, "is_admin": False, "gift": False,
+     "note": None, "stripe_sub": False, "uses_30d": 3, "cost_30d": 0.05, "last_use": None, "last_sign_in_at": None},
+    {"id": "22222222-2222-2222-2222-222222222222", "email": "admin@example.ch", "name": "Admin", "created_at": "2026-10-13T10:00:00Z",
+     "plan": "monthly", "period_end": "2026-11-16T00:00:00Z", "extra_interviews": 0, "free_claimed_at": "2026-10-13T10:00:00Z", "blocked": False,
+     "is_admin": True, "gift": False, "note": None, "stripe_sub": True, "uses_30d": 40, "cost_30d": 0.9, "last_use": None, "last_sign_in_at": None}]}
+
+
+async def t_admin_offrir_un_abonnement(b, base):
+    async with Ctx(b, base, ai={"admin:stats": ADM_STATS, "admin:users": ADM_USERS, "admin:grant": {"userId": "x"}}) as c:
+        await c.open("admin.html#app")
+        await c.page.wait_for_selector("#panel:not([hidden])", timeout=5000)
+        check("5" in await c.page.inner_text("#stats"), "les statistiques ne s'affichent pas")
+        check("ami@example.ch" in await c.page.inner_text("#users"), "la liste des comptes ne s'affiche pas")
+        await c.page.click('[data-open="0"]')
+        await c.page.wait_for_selector("#dlg[open]")
+        await c.page.select_option("#gDays", "90")
+        await c.page.click('[data-act="grant"]')
+        await c.page.wait_for_timeout(500)
+        g = [x for x in c.bodies if x.get("action") == "grant"]
+        check(g and g[0]["days"] == 90 and g[0]["plan"] == "monthly" and g[0]["userId"].startswith("1111"), f"offre mal envoyée : {g}")
+        await c.shot("admin")
+        c.no_js_errors()
+
+
+async def t_admin_refuse_aux_autres(b, base):
+    async with Ctx(b, base, ai={"admin:stats": {"error": "forbidden"}, "admin:users": {"error": "forbidden"}}) as c:
+        await c.open("admin.html#app")
+        await c.page.wait_for_timeout(800)
+        check("réservé" in await c.page.inner_text("#gate"), "un non-admin doit voir « Accès réservé »")
+        check(await c.page.is_hidden("#panel"), "le panneau admin ne doit pas s'afficher")
 
 
 TESTS = [v for k, v in list(globals().items()) if k.startswith("t_")]
