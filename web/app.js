@@ -1217,7 +1217,7 @@ function voiceUI(mode,state,hint){
 function micIdle(){
   if(!SR){voiceUI("error","Dictée vocale indisponible","Ce navigateur ne sait pas transcrire la voix (essaie Chrome, Edge ou Safari) : écris ta réponse ci-dessous.");$("#micBtn").disabled=true;return}
   if(micDenied){voiceUI("error","Micro bloqué","Autorise le micro pour ce site (icône à gauche de l'adresse), puis appuie sur le bouton micro. Tu peux aussi écrire ta réponse.");return}
-  if(IV.state==="answering") voiceUI("off","Micro coupé","Appuie sur le micro pour répondre à voix haute, ou écris ta réponse.");
+  if(IV.state==="answering") voiceUI("off",IS_IOS?"Appuie sur le micro pour répondre":"Micro coupé","Appuie sur le micro pour répondre à voix haute, ou écris ta réponse.");
   else voiceUI("off","En attente",wantMic?"Le micro s'allumera tout seul quand ce sera à toi de répondre.":"Le micro est désactivé : tu répondras par écrit.");
 }
 function showLive(tmp){
@@ -1228,7 +1228,7 @@ function armSilence(){
   clearTimeout(silentTimer);
   silentTimer=setTimeout(()=>{ if(!recOn)return;
     if(heard) voiceUI("silent","Je n'entends plus rien","Continue ta réponse, ou appuie sur « J'ai fini de répondre ».");
-    else voiceUI("silent","Je n'entends rien pour l'instant","Parle normalement, près de l'appareil. Si rien ne s'affiche, vérifie que le micro n'est pas coupé et que ce site a le droit de l'utiliser.");
+    else voiceUI("silent","Je n'entends rien pour l'instant","Touche le micro pour relancer l'écoute, puis parle normalement. Sinon, vérifie que ce site a le droit d'utiliser le micro.");
   },heard?4000:6000);
 }
 function hearing(){ if(!recOn)return; heard=true; voiceUI("hearing","Je t'entends","Ce que tu dis s'affiche en direct ; corrige-le dans le cadre si besoin, puis « J'ai fini de répondre »."); armSilence(); }
@@ -1236,13 +1236,14 @@ function startRec(auto){
   if(!SR||recOn)return;
   recAuto=!!auto;
   try{
-    rec=new SR(); rec.lang=({fr:"fr-CH",en:"en-GB",de:"de-CH",it:"it-CH"})[IV.lang]; rec.continuous=true; rec.interimResults=true;
+    const r=new SR(); rec=r; rec.lang=({fr:"fr-CH",en:"en-GB",de:"de-CH",it:"it-CH"})[IV.lang]; rec.continuous=true; rec.interimResults=true;
     recBase=$("#answerBox").value?$("#answerBox").value.trim()+" ":""; heard=!!recBase.trim();
-    rec.onaudiostart=()=>{ if(recOn&&!heard) voiceUI("listening","Je t'écoute… parle quand tu veux","Ta réponse s'affichera ici au fur et à mesure."); armSilence(); };
-    rec.onspeechstart=hearing;
-    rec.onresult=e=>{let fin="",tmp="";for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t;else tmp+=t}
+    rec.onaudiostart=()=>{ if(rec!==r)return; if(recOn&&!heard) voiceUI("listening","Je t'écoute… parle quand tu veux","Ta réponse s'affichera ici au fur et à mesure."); armSilence(); };
+    rec.onspeechstart=()=>{ if(rec===r) hearing() };
+    rec.onresult=e=>{if(rec!==r)return;let fin="",tmp="";for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t;else tmp+=t}
       if(fin)recBase+=fin.trim()+" "; $("#answerBox").value=(recBase+tmp).trimStart(); showLive(tmp); if((fin+tmp).trim())hearing()};
     rec.onerror=e=>{
+      if(rec!==r)return;   // ancienne écoute relancée entre-temps
       const er=e&&e.error;
       if(er==="no-speech"||er==="aborted")return;           // silence : la reconnaissance redémarre toute seule
       recOn=false; clearTimeout(silentTimer);
@@ -1254,7 +1255,7 @@ function startRec(auto){
       if(er==="network") return voiceUI("error","Dictée interrompue","La transcription de la voix a besoin d'une connexion internet stable. Réessaie ou écris ta réponse.");
       voiceUI("error","Le micro s'est arrêté","Appuie à nouveau sur le micro pour reprendre, ou écris ta réponse.");
     };
-    rec.onend=()=>{if(recOn){try{rec.start()}catch(e){recOn=false;micIdle()}}};
+    rec.onend=()=>{if(rec!==r||!recOn)return;try{r.start()}catch(e){recOn=false;micIdle()}};
     rec.start(); recOn=true; micDenied=false;
     voiceUI("listening","Je t'écoute… parle quand tu veux","Ta réponse s'affichera ici au fur et à mesure."); showLive(""); armSilence();
   }catch(e){recOn=false;voiceUI("off","Appuie sur le micro pour parler","")}
@@ -1262,7 +1263,9 @@ function startRec(auto){
 function stopRec(){recOn=false;clearTimeout(silentTimer);try{rec&&rec.stop()}catch(e){} micIdle()}
 $("#micBtn").onclick=()=>{
   unlockSpeech();
-  if(recOn){wantMic=false;store.set("ivMic",false);stopRec();return}
+  // micro allumé mais rien de capté : un appui relance l'écoute (au lieu de couper)
+  if(recOn&&!heard){recOn=false;clearTimeout(silentTimer);try{rec&&rec.abort()}catch(e){} setTimeout(()=>startRec(false),180);return}
+  if(recOn){stopRec();return}
   wantMic=true;store.set("ivMic",true);micDenied=false;
   if(IV.state==="answering")startRec(false); else micIdle();
 };
@@ -1285,7 +1288,12 @@ function setState(st,label){
   $("#ivState").innerHTML=label?esc(label):(map[st]||"");
   const canAnswer=st==="answering"; $("#sendBtn").disabled=!canAnswer; $("#answerBox").disabled=!canAnswer;
   if(!$("#voicePanel").hidden){
-    if(canAnswer&&SR&&wantMic&&!micDenied&&!IV.ended) startRec(true);
+    // iPhone/iPad : le micro n'écoute réellement que s'il est allumé par un appui, et pas juste après la voix du recruteur.
+    // On attend donc l'appui ; ailleurs on l'allume tout seul, après une courte pause pour libérer l'audio.
+    if(canAnswer&&SR&&wantMic&&!micDenied&&!IV.ended){
+      if(IS_IOS) voiceUI("off","Appuie sur le micro pour répondre","Un appui à chaque réponse : c'est ce que demande l'iPhone pour écouter.");
+      else setTimeout(()=>{if(IV.state==="answering"&&!IV.ended&&!recOn)startRec(true)},400);
+    }
     // sur téléphone, ramène le micro et la réponse à l'écran quand c'est à toi
     if(canAnswer&&matchMedia("(max-width: 920px)").matches) $("#voicePanel").scrollIntoView({behavior:"smooth",block:"center"});
     else if(!canAnswer&&recOn) stopRec();

@@ -63,13 +63,14 @@ def serve():
 
 class Ctx:
     """Un onglet isolé avec serveur simulé ; garde la trace des appels et des erreurs JavaScript."""
-    def __init__(self, browser, base, width=1280, height=900, ai=None, patch=None, init=None):
-        self.browser, self.base, self.size, self.ai, self.patch, self.init = browser, base, (width, height), ai or {}, patch, init
+    def __init__(self, browser, base, width=1280, height=900, ai=None, patch=None, init=None, ua=None):
+        self.browser, self.base, self.size, self.ai, self.patch, self.init, self.ua = browser, base, (width, height), ai or {}, patch, init, ua
         self.bodies = []
         self.calls, self.errors = [], []
 
     async def __aenter__(self):
-        self.ctx = await self.browser.new_context(viewport={"width": self.size[0], "height": self.size[1]}, accept_downloads=True)
+        opts = {"user_agent": self.ua} if self.ua else {}
+        self.ctx = await self.browser.new_context(viewport={"width": self.size[0], "height": self.size[1]}, accept_downloads=True, **opts)
         self.page = await self.ctx.new_page()
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
         if self.init:
@@ -534,6 +535,31 @@ async def t_admin_refuse_aux_autres(b, base):
         await c.page.wait_for_timeout(800)
         check("réservé" in await c.page.inner_text("#gate"), "un non-admin doit voir « Accès réservé »")
         check(await c.page.is_hidden("#panel"), "le panneau admin ne doit pas s'afficher")
+
+
+IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0 Mobile/15E148 Safari/604.1"
+
+
+async def t_entretien_iphone_micro_par_appui(b, base):
+    async with Ctx(b, base, 390, 844, ai=IV_AI, init=FAKE_VOICE, ua=IPHONE_UA) as c:
+        await start_interview(c, "talk")
+        await c.page.wait_for_timeout(900)
+        check(await c.page.get_attribute("#voicePanel", "data-mode") == "off", "sur iPhone le micro ne doit pas s'allumer tout seul")
+        check("appuie" in (await c.page.inner_text("#micState")).lower(), "sur iPhone il faut inviter à appuyer sur le micro")
+        await c.page.click("#micBtn")
+        await c.page.wait_for_selector('#voicePanel[data-mode="hearing"]', timeout=5000)
+        c.no_js_errors()
+
+
+async def t_entretien_appui_relance_si_rien_entendu(b, base):
+    async with Ctx(b, base, ai=IV_AI, init=FAKE_VOICE) as c:
+        await start_interview(c, "silent")
+        await c.page.wait_for_selector('#voicePanel[data-mode="silent"]', timeout=9000)
+        await c.page.evaluate("localStorage.setItem('fakeVoice','talk')")
+        await c.page.click("#micBtn")
+        await c.page.wait_for_selector('#voicePanel[data-mode="hearing"]', timeout=5000)
+        await c.page.wait_for_function("document.querySelector('#answerBox').value.includes('sept ans')", timeout=5000)
+        c.no_js_errors()
 
 
 TESTS = [v for k, v in list(globals().items()) if k.startswith("t_")]
