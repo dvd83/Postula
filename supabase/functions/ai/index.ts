@@ -110,10 +110,15 @@ Missions : ${o.missions.join(" ; ")}
 CV (JSON) :
 ${JSON.stringify(paras)}`);
     const v = parseJson<{ resume?: string; modifs?: { i: number; s: string[]; raison?: string }[] }>(r.text);
-    // Ne renvoie que des modifications structurellement sûres (même nombre de segments)
+    // Même nombre de segments exigé, sauf pour un paragraphe d'un seul segment (on recolle alors le texte)
     const modifs = (Array.isArray(v.modifs) ? v.modifs : []).filter((m) =>
-      Number.isInteger(m?.i) && paras[m.i] && Array.isArray(m.s) && m.s.length === paras[m.i].s.length
-    ).map((m) => ({ i: m.i, s: m.s.map((x) => String(x)), raison: String(m.raison ?? "").slice(0, 300) }));
+      Number.isInteger(m?.i) && paras[m.i] && Array.isArray(m.s) && m.s.length > 0 &&
+      (m.s.length === paras[m.i].s.length || paras[m.i].s.length === 1)
+    ).map((m) => ({
+      i: m.i,
+      s: m.s.length === paras[m.i].s.length ? m.s.map((x) => String(x)) : [m.s.map((x) => String(x)).join(" ").replace(/\s+/g, " ").trim()],
+      raison: String(m.raison ?? "").slice(0, 300),
+    }));
     return { value: { resume: String(v.resume ?? "").slice(0, 400), modifs }, cost: r.cost };
   });
 }

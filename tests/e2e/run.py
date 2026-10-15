@@ -63,14 +63,17 @@ def serve():
 
 class Ctx:
     """Un onglet isolé avec serveur simulé ; garde la trace des appels et des erreurs JavaScript."""
-    def __init__(self, browser, base, width=1280, height=900, ai=None, patch=None):
-        self.browser, self.base, self.size, self.ai, self.patch = browser, base, (width, height), ai or {}, patch
+    def __init__(self, browser, base, width=1280, height=900, ai=None, patch=None, init=None):
+        self.browser, self.base, self.size, self.ai, self.patch, self.init = browser, base, (width, height), ai or {}, patch, init
+        self.bodies = []
         self.calls, self.errors = [], []
 
     async def __aenter__(self):
         self.ctx = await self.browser.new_context(viewport={"width": self.size[0], "height": self.size[1]}, accept_downloads=True)
         self.page = await self.ctx.new_page()
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
+        if self.init:
+            await self.page.add_init_script(self.init)
         await self.page.route("**/*", self.route)
         return self
 
@@ -93,7 +96,10 @@ class Ctx:
             body = json.loads(r.request.post_data or "{}")
             act = body.get("action")
             self.calls.append(act)
+            self.bodies.append(body)
             res = self.ai.get(act, {"analyze_offer": OFFER, "structure_cv": CV, "fetch_offer": FETCHED, "letter": LETTER}.get(act))
+            if callable(res):
+                res = res(body)
             if isinstance(res, dict) and "error" in res:
                 return await r.fulfill(status=422, content_type="application/json", body=json.dumps(res))
             return await r.fulfill(content_type="application/json", body=json.dumps({"ok": True, "result": res}))
@@ -327,6 +333,125 @@ async def t_photo_ajout_possible_sans_cv_fichier(b, base):
         check(await c.page.is_visible("#photoRow"), "avec un profil collé, il faut pouvoir ajouter sa photo")
         await c.page.set_input_files("#photoFile", os.path.join(FIX, "portrait.jpg"))
         await c.page.wait_for_selector("#photoThumb img", timeout=5000)
+
+
+# ---------- adaptation d'un CV Word produit par Postula ----------
+async def make_theme_docx(b, base):
+    async with Ctx(b, base) as c:
+        await c.open("#app")
+        await c.page.fill("#offerText", "Chef de projet digital chez Helvetia Media à Lausanne. " * 4)
+        await c.page.click("#analyzeBtn"); await c.page.wait_for_selector("#offerOut:not([hidden])")
+        await c.step(2)
+        await c.page.click("#liAlt summary")
+        await c.page.fill("#profileText", "Camille Rochat\nChef de projet digital\nExpérience\nLe Temps\n" * 6)
+        await c.page.click("#useProfile")
+        await c.page.wait_for_selector("#dlThemeDocx:not([hidden])", timeout=10000)
+        async with c.page.expect_download() as d:
+            await c.page.click("#dlThemeDocx")
+        return open(await (await d.value).path(), "rb").read()
+
+
+async def t_cv_word_postula_readapte(b, base):
+    raw = await make_theme_docx(b, base)
+    tmp = os.path.join(SHOTS or "/tmp", "cv_postula.docx"); open(tmp, "wb").write(raw)
+
+    def adapt(body):
+        paras = body["paras"]
+        for p in paras:
+            check(not any(re.fullmatch(r"[\s•·\-–—*]*", x) for x in p["s"]), f"puce ou séparateur envoyé à l'IA : {p['s']}")
+        i = next(k for k, p in enumerate(paras) if any("Pilotage" in x for x in p["s"]))
+        j = next(k for k, p in enumerate(paras) if any("Scrum" in x for x in p["s"]) and k != i)
+        return {"resume": "Accent sur la gestion de projet Agile.", "modifs": [
+            {"i": i, "s": ["Pilotage Agile de la refonte du site (2 M visites/mois), livrée dans les délais"], "raison": "vocabulaire de l'offre"},
+            {"i": j, "s": ["Animation", "des rituels Scrum et Kanban pour 9 personnes"], "raison": "segments recollés"}]}
+    async with Ctx(b, base, ai={"adapt_cv": adapt}) as c:
+        await c.open("#app")
+        await c.page.fill("#offerText", "Chef de projet digital chez Helvetia Media à Lausanne. " * 4)
+        await c.page.click("#analyzeBtn"); await c.page.wait_for_selector("#offerOut:not([hidden])")
+        await c.step(2)
+        await c.page.set_input_files("#cvFile", tmp)
+        await c.page.wait_for_function("!document.querySelector('#adaptBtn').disabled")
+        await c.page.click("#adaptBtn")
+        await c.page.wait_for_selector("#changesCard:not([hidden])", timeout=8000)
+        n = await c.page.locator("#changes .chg").count()
+        check(n == 2, f"{n} modification(s) affichée(s) au lieu de 2")
+        check(await c.page.is_visible("#dlDocx"), "le CV adapté n'est pas téléchargeable")
+        async with c.page.expect_download() as d:
+            await c.page.click("#dlDocx")
+        doc = zipfile.ZipFile(io.BytesIO(open(await (await d.value).path(), "rb").read())).read("word/document.xml").decode("utf-8")
+        check("Pilotage Agile de la refonte" in doc, "la modification n'a pas été appliquée au Word")
+        check("Scrum et Kanban" in doc, "la modification recollée n'a pas été appliquée")
+        c.no_js_errors()
+
+
+# ---------- entretien oral : on voit si le micro capte ----------
+FAKE_VOICE = """
+(() => {
+  const mode = window.__voice || 'talk';
+  window.speechSynthesis = {speaking:false,pending:false,cancel(){},getVoices(){return []},onvoiceschanged:null,
+    speak(u){setTimeout(()=>u.onend&&u.onend(),30)}};
+  window.SpeechSynthesisUtterance = function(t){this.text=t};
+  class FakeRec {
+    start(){ const m = localStorage.getItem('fakeVoice') || 'talk'; this.on = true;
+      if (m === 'denied') { setTimeout(()=>{this.onerror&&this.onerror({error:'not-allowed'}); this.onend&&this.onend()},20); return; }
+      setTimeout(()=>this.onaudiostart&&this.onaudiostart(), 30);
+      if (m === 'talk') {
+        setTimeout(()=>{this.onspeechstart&&this.onspeechstart()}, 300);
+        setTimeout(()=>this.onresult&&this.onresult({resultIndex:0,results:[Object.assign([{transcript:'Je pilote des projets'}],{isFinal:false})]}), 500);
+        setTimeout(()=>this.onresult&&this.onresult({resultIndex:0,results:[Object.assign([{transcript:'Je pilote des projets web depuis sept ans'}],{isFinal:true})]}), 900);
+      }
+    }
+    stop(){ this.on = false; setTimeout(()=>this.onend&&this.onend(), 10); }
+    abort(){ this.stop(); }
+  }
+  window.SpeechRecognition = FakeRec; window.webkitSpeechRecognition = FakeRec;
+})();"""
+IV_AI = {"interview_start": {"sessionId": "s1", "persona": {"name": "Claire Morel", "role": "Responsable RH"},
+                             "text": "Bonjour, je suis Claire. Parlez-moi de votre parcours."},
+         "interview_turn": {"text": "Merci. Donnez-moi un exemple concret."}}
+
+
+async def start_interview(c, voice):
+    await c.open("#app")
+    await c.page.evaluate(f"localStorage.setItem('fakeVoice','{voice}')")
+    await c.page.fill("#offerText", "Chef de projet digital chez Helvetia Media à Lausanne. " * 4)
+    await c.page.click("#analyzeBtn"); await c.page.wait_for_selector("#offerOut:not([hidden])")
+    await c.step(4)
+    await c.page.click("#ivStart")
+    await c.page.wait_for_selector("#voicePanel:not([hidden])", timeout=5000)
+
+
+async def t_entretien_micro_montre_ce_qu_il_capte(b, base):
+    async with Ctx(b, base, 390, 844, ai=IV_AI, init=FAKE_VOICE) as c:
+        await start_interview(c, "talk")
+        await c.page.wait_for_selector('#voicePanel[data-mode="hearing"]', timeout=5000)
+        await c.page.wait_for_function("document.querySelector('#liveText').textContent.includes('sept ans')", timeout=5000)
+        check("J'ai fini" in await c.page.inner_text("#sendBtn"), "le bouton doit indiquer « J'ai fini de répondre » pendant la dictée")
+        check("sept ans" in await c.page.input_value("#answerBox"), "la réponse dictée doit aussi être dans le cadre de texte")
+        await c.shot("entretien_micro_capte")
+        await c.page.click("#sendBtn")
+        await c.page.wait_for_function("document.querySelectorAll('#transcript .bub.c').length===1", timeout=5000)
+        turn = [x for x in c.bodies if x.get("action") == "interview_turn"]
+        check(turn and "sept ans" in json.dumps(turn[-1], ensure_ascii=False), "la réponse dictée n'a pas été envoyée au recruteur")
+        c.no_js_errors()
+
+
+async def t_entretien_micro_silence_signale(b, base):
+    async with Ctx(b, base, ai=IV_AI, init=FAKE_VOICE) as c:
+        await start_interview(c, "silent")
+        await c.page.wait_for_selector('#voicePanel[data-mode="listening"]', timeout=5000)
+        await c.page.wait_for_selector('#voicePanel[data-mode="silent"]', timeout=9000)
+        check("rien" in (await c.page.inner_text("#micState")).lower(), "il faut dire clairement que rien n'est entendu")
+
+
+async def t_entretien_micro_refuse_explique(b, base):
+    async with Ctx(b, base, ai=IV_AI, init=FAKE_VOICE) as c:
+        await start_interview(c, "denied")
+        await c.page.wait_for_timeout(400)
+        await c.page.click("#micBtn")
+        await c.page.wait_for_selector('#voicePanel[data-mode="error"]', timeout=5000)
+        check("autorise" in (await c.page.inner_text("#micHint")).lower(), "il faut expliquer comment autoriser le micro")
+        check(not await c.page.is_disabled("#answerBox"), "on doit pouvoir répondre par écrit")
 
 
 TESTS = [v for k, v in list(globals().items()) if k.startswith("t_")]

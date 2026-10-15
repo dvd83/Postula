@@ -317,15 +317,20 @@
       </div>
       <div class="card stack">
         <div class="transcript" id="transcript" aria-live="polite"></div>
-        <div>
-          <div class="answer">
-            <button class="mic" id="micBtn" aria-label="Répondre à voix haute" title="Répondre à voix haute">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-            </button>
-            <textarea id="answerBox" placeholder="Ta réponse… (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)"></textarea>
-            <button class="btn primary" id="sendBtn">Envoyer</button>
+        <div class="voice" id="voicePanel" data-mode="off" hidden>
+          <button class="vmic" id="micBtn" type="button" aria-label="Activer le micro" title="Activer ou couper le micro">
+            <span class="rings" aria-hidden="true"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <div class="vbody">
+            <div class="vstate" id="micState" aria-live="polite">Micro coupé</div>
+            <div class="vhint" id="micHint"></div>
+            <p class="vlive" id="liveText" aria-live="off"></p>
           </div>
-          <div class="hint" id="micHint"></div>
+        </div>
+        <div class="answer">
+          <textarea id="answerBox" placeholder="Ta réponse… (Entrée pour envoyer, Maj+Entrée pour aller à la ligne)"></textarea>
+          <button class="btn primary" id="sendBtn">Envoyer</button>
         </div>
       </div>
     </div>

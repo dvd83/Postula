@@ -708,13 +708,25 @@ $("#adaptBtn").onclick=async()=>{
   if(S.cv.kind!=="docx"){ $("#themeBtn").click(); return; }
   try{need();busy(btn,true,"Adaptation…");
     const d=await parseDocx(S.cv.buf);
-    const payload=d.paras.map((x,i)=>({i,s:x.segs.map(s=>s.text)}));
+    // On n'envoie que les morceaux de texte réels : puces, tirets, séparateurs restent tels quels.
+    // Sinon l'IA les fusionne ou les oublie, et la modification ne peut plus être replacée (CV « non modifié »).
+    const FIXED=/^[\s•·\-–—*▪●◦○■□►▸✓✔|:;,.()\[\]\/]*$/;
+    const sent=d.paras.map((x,i)=>{const idx=x.segs.map((g,k)=>FIXED.test(g.text)?-1:k).filter(k=>k>=0);return {i,idx,s:idx.map(k=>x.segs[k].text)}}).filter(x=>x.s.length);
+    const payload=sent.map(x=>({s:x.s}));
     const o=S.offer.info;
     if(JSON.stringify(payload).length>60000) throw {code:"too_large"};
     const res=await api("adapt_cv",{offer:o,paras:payload});
-    const mods=(res&&Array.isArray(res.modifs)?res.modifs:[]).filter(m=>{
-      const p=d.paras[m.i]; return p&&Array.isArray(m.s)&&m.s.length===p.segs.length&&m.s.join("")!==p.segs.map(s=>s.text).join("");
-    }).map(m=>({i:m.i,s:m.s.map(String),before:d.paras[m.i].segs.map(s=>s.text),why:m.raison||"",on:true}));
+    const mods=[];
+    (res&&Array.isArray(res.modifs)?res.modifs:[]).forEach(m=>{
+      const x=sent[m.i]; if(!x||!Array.isArray(m.s))return;
+      let ns=m.s.map(v=>String(v??""));
+      // tolérance : un seul morceau modifiable mais réponse découpée autrement → on recolle
+      if(ns.length!==x.s.length){ if(x.s.length===1) ns=[ns.join(" ").replace(/\s+/g," ").trim()]; else return; }
+      const p=d.paras[x.i], before=p.segs.map(g=>g.text), after=before.slice();
+      x.idx.forEach((k,j)=>{after[k]=ns[j]});
+      if(after.join("")===before.join(""))return;
+      mods.push({i:x.i,s:after,before,why:m.raison||"",on:true});
+    });
     S.changes=mods;
     $("#chgSummary").textContent=res&&res.resume||"";
     renderChanges(); await applyChanges(); markDone(2);
@@ -1134,24 +1146,72 @@ function speak(text){
   });
 }
 
-/* Micro (reconnaissance vocale du navigateur) */
+/* Micro (reconnaissance vocale du navigateur)
+   Le panneau montre en permanence ce qui se passe : micro coupé, à l'écoute, voix captée (avec le texte en direct),
+   rien entendu depuis quelques secondes, ou problème d'accès au micro. */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-let rec=null, recOn=false, recBase="";
-function micAvail(on,msg){$("#micBtn").hidden=!on;$("#micHint").textContent=msg||""}
-if(!SR) micAvail(false,"Réponds au clavier : la dictée vocale n'est pas disponible dans ce navigateur.");
-function startRec(){
+let rec=null, recOn=false, recBase="", heard=false, silentTimer=null, recAuto=false, micDenied=false;
+let wantMic=store.get("ivMic",true);
+function voiceUI(mode,state,hint){
+  const v=$("#voicePanel"); v.dataset.mode=mode;
+  $("#micState").innerHTML=`<span class="dot"></span>${esc(state)}`; $("#micHint").textContent=hint||"";
+  $("#micBtn").setAttribute("aria-pressed",String(recOn)); $("#micBtn").setAttribute("aria-label",recOn?"Couper le micro":"Activer le micro");
+  $("#sendBtn").textContent=recOn?"J'ai fini de répondre":"Envoyer";
+}
+function micIdle(){
+  if(!SR){voiceUI("error","Dictée vocale indisponible","Ce navigateur ne sait pas transcrire la voix (essaie Chrome, Edge ou Safari) : écris ta réponse ci-dessous.");$("#micBtn").disabled=true;return}
+  if(micDenied){voiceUI("error","Micro bloqué","Autorise le micro pour ce site (icône à gauche de l'adresse), puis appuie sur le bouton micro. Tu peux aussi écrire ta réponse.");return}
+  if(IV.state==="answering") voiceUI("off","Micro coupé","Appuie sur le micro pour répondre à voix haute, ou écris ta réponse.");
+  else voiceUI("off","En attente",wantMic?"Le micro s'allumera tout seul quand ce sera à toi de répondre.":"Le micro est désactivé : tu répondras par écrit.");
+}
+function showLive(tmp){
+  const fin=recBase.trim(); $("#liveText").innerHTML=esc(fin)+(tmp?` <span class="tmp">${esc(tmp)}</span>`:"");
+  const el=$("#liveText"); el.scrollTop=el.scrollHeight;
+}
+function armSilence(){
+  clearTimeout(silentTimer);
+  silentTimer=setTimeout(()=>{ if(!recOn)return;
+    if(heard) voiceUI("silent","Je n'entends plus rien","Continue ta réponse, ou appuie sur « J'ai fini de répondre ».");
+    else voiceUI("silent","Je n'entends rien pour l'instant","Parle normalement, près de l'appareil. Si rien ne s'affiche, vérifie que le micro n'est pas coupé et que ce site a le droit de l'utiliser.");
+  },heard?4000:6000);
+}
+function hearing(){ if(!recOn)return; heard=true; voiceUI("hearing","Je t'entends","Ce que tu dis s'affiche en direct ; corrige-le dans le cadre si besoin, puis « J'ai fini de répondre »."); armSilence(); }
+function startRec(auto){
   if(!SR||recOn)return;
+  recAuto=!!auto;
   try{
     rec=new SR(); rec.lang=({fr:"fr-CH",en:"en-GB",de:"de-CH",it:"it-CH"})[IV.lang]; rec.continuous=true; rec.interimResults=true;
-    recBase=$("#answerBox").value?$("#answerBox").value.trim()+" ":"";
-    rec.onresult=e=>{let fin="",tmp="";for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t;else tmp+=t}if(fin)recBase+=fin+" ";$("#answerBox").value=(recBase+tmp).trimStart()};
-    rec.onerror=e=>{stopRec();if(e.error==="not-allowed"||e.error==="service-not-allowed")micAvail(false,"Le micro n'est pas accessible ici : réponds au clavier.")};
-    rec.onend=()=>{if(recOn){try{rec.start()}catch(e){stopRec()}}};
-    rec.start(); recOn=true; $("#micBtn").classList.add("live"); $("#micHint").textContent="Je t'écoute… appuie à nouveau pour arrêter.";
-  }catch(e){micAvail(false,"Le micro n'est pas accessible ici : réponds au clavier.")}
+    recBase=$("#answerBox").value?$("#answerBox").value.trim()+" ":""; heard=!!recBase.trim();
+    rec.onaudiostart=()=>{ if(recOn&&!heard) voiceUI("listening","Je t'écoute… parle quand tu veux","Ta réponse s'affichera ici au fur et à mesure."); armSilence(); };
+    rec.onspeechstart=hearing;
+    rec.onresult=e=>{let fin="",tmp="";for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t;else tmp+=t}
+      if(fin)recBase+=fin.trim()+" "; $("#answerBox").value=(recBase+tmp).trimStart(); showLive(tmp); if((fin+tmp).trim())hearing()};
+    rec.onerror=e=>{
+      const er=e&&e.error;
+      if(er==="no-speech"||er==="aborted")return;           // silence : la reconnaissance redémarre toute seule
+      recOn=false; clearTimeout(silentTimer);
+      if(er==="not-allowed"||er==="service-not-allowed"){
+        if(recAuto){voiceUI("off","Appuie sur le micro pour parler","Ton navigateur demande un geste de ta part pour allumer le micro.");return}
+        micDenied=true; return micIdle();
+      }
+      if(er==="audio-capture") return voiceUI("error","Aucun micro détecté","Branche ou active un micro, puis appuie sur le bouton. Tu peux aussi écrire ta réponse.");
+      if(er==="network") return voiceUI("error","Dictée interrompue","La transcription de la voix a besoin d'une connexion internet stable. Réessaie ou écris ta réponse.");
+      voiceUI("error","Le micro s'est arrêté","Appuie à nouveau sur le micro pour reprendre, ou écris ta réponse.");
+    };
+    rec.onend=()=>{if(recOn){try{rec.start()}catch(e){recOn=false;micIdle()}}};
+    rec.start(); recOn=true; micDenied=false;
+    voiceUI("listening","Je t'écoute… parle quand tu veux","Ta réponse s'affichera ici au fur et à mesure."); showLive(""); armSilence();
+  }catch(e){recOn=false;voiceUI("off","Appuie sur le micro pour parler","")}
 }
-function stopRec(){recOn=false;$("#micBtn").classList.remove("live");try{rec&&rec.stop()}catch(e){} if($("#micHint").textContent.startsWith("Je t'écoute"))$("#micHint").textContent=""}
-$("#micBtn").onclick=()=>recOn?stopRec():startRec();
+function stopRec(){recOn=false;clearTimeout(silentTimer);try{rec&&rec.stop()}catch(e){} micIdle()}
+$("#micBtn").onclick=()=>{
+  unlockSpeech();
+  if(recOn){wantMic=false;store.set("ivMic",false);stopRec();return}
+  wantMic=true;store.set("ivMic",true);micDenied=false;
+  if(IV.state==="answering")startRec(false); else micIdle();
+};
+// Taper au clavier pendant la dictée : on coupe le micro pour ne pas écraser ce que tu écris
+$("#answerBox").addEventListener("keydown",e=>{if(recOn&&e.key!=="Enter"&&!e.metaKey&&!e.ctrlKey&&e.key.length===1)stopRec()});
 
 /* Chrono : tourne seulement quand le recruteur parle ou que le candidat répond */
 function tick(){
@@ -1168,7 +1228,14 @@ function setState(st,label){
   const map={thinking:'<span class="spinner"></span> Le recruteur prépare sa question… (chrono en pause)',speaking:"Le recruteur parle",answering:"À toi de répondre",evaluating:'<span class="spinner"></span> Analyse de ton entretien…'};
   $("#ivState").innerHTML=label?esc(label):(map[st]||"");
   const canAnswer=st==="answering"; $("#sendBtn").disabled=!canAnswer; $("#answerBox").disabled=!canAnswer;
-  if(canAnswer)$("#answerBox").focus();
+  if(!$("#voicePanel").hidden){
+    if(canAnswer&&SR&&wantMic&&!micDenied&&!IV.ended) startRec(true);
+    // sur téléphone, ramène le micro et la réponse à l'écran quand c'est à toi
+    if(canAnswer&&matchMedia("(max-width: 920px)").matches) $("#voicePanel").scrollIntoView({behavior:"smooth",block:"center"});
+    else if(!canAnswer&&recOn) stopRec();
+    else if(!recOn) micIdle();
+  }
+  if(canAnswer&&!recOn&&!TOUCH)$("#answerBox").focus();
 }
 function bubble(role,text){
   const t=$("#transcript"), d=document.createElement("div"); d.className="bub "+(role==="r"?"r":"c");
@@ -1198,7 +1265,7 @@ async function sendAnswer(){
   stopRec();
   const a=$("#answerBox").value.trim()||"(silence, pas de réponse)";
   if(!IV.retry){ bubble("c",a); IV.turns.push({role:"user",content:`Réponse du candidat : ${a}\n[Temps restant : ${Math.ceil(IV.remaining)} s]`}); }
-  IV.retry=false; $("#answerBox").value="";
+  IV.retry=false; $("#answerBox").value=""; $("#liveText").textContent=""; heard=false;
   if(IV.remaining<=0||IV.timeUp) return endInterview();
   await interviewerTurn();
 }
@@ -1232,7 +1299,7 @@ $("#ivStart").onclick=async()=>{
     $("#rName").textContent=IV.persona[0]; $("#rRole").textContent=IV.persona[1]+(S.offer.info.entreprise?" · "+S.offer.info.entreprise:"");
     $("#avatar").textContent=IV.persona[0].split(" ").map(w=>w[0]).join("");
     $("#transcript").innerHTML=""; $("#ivSetup").hidden=true; $("#ivResult").hidden=true; $("#ivRoom").hidden=false;
-    if(SR) micAvail(true,"Appuie sur le micro pour répondre à voix haute, ou écris ta réponse.");
+    $("#voicePanel").hidden=false; $("#liveText").textContent=""; micIdle();
     if(IS_IOS) toast("Tu n'entends rien ? Désactive le mode silencieux de ton iPhone et monte le volume.");
     clearInterval(IV.timer); IV.timer=setInterval(tick,250); tick();
     await askQuestion(r.text); if(IV.ended)return;

@@ -390,3 +390,54 @@ section[data-step].enter{animation:stepin .32s var(--ease)}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--ink-2);cursor:pointer}
 .linkbtn:hover{color:var(--ink);text-decoration:underline}
 .linkbtn[hidden]{display:none}
+
+/* Réponse à l'oral : on voit en direct si le micro capte */
+.voice{display:flex;gap:16px;align-items:center;padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:var(--paper);transition:border-color .2s,background .2s}
+.voice[hidden]{display:none}
+.vmic{position:relative;appearance:none;cursor:pointer;flex:none;width:68px;height:68px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line-2);background:var(--sheet);color:var(--ink);transition:transform .12s,background .2s,color .2s}
+.vmic svg{width:26px;height:26px;position:relative}
+.vmic:active{transform:scale(.95)}
+.vmic:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+.vmic .rings{position:absolute;inset:0;border-radius:50%;pointer-events:none}
+.vbody{flex:1;min-width:0}
+.vstate{font-family:var(--f-display);font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px}
+.vhint{font-size:13.5px;color:var(--ink-2);margin-top:2px}
+.vhint:empty{display:none}
+.vlive{margin:6px 0 0;font-size:16px;line-height:1.45;color:var(--ink);max-height:7.5em;overflow:auto;overflow-wrap:anywhere}
+.vlive:empty{display:none}
+.vlive .tmp{color:var(--ink-2)}
+/* à l'écoute, rien entendu pour l'instant */
+.voice[data-mode="listening"]{border-color:var(--blue);background:var(--blue-soft)}
+.voice[data-mode="listening"] .vmic{background:var(--blue);border-color:var(--blue);color:#fff}
+.voice[data-mode="listening"] .vmic .rings{animation:ring 1.6s ease-out infinite;box-shadow:0 0 0 6px color-mix(in srgb,var(--blue) 35%,transparent)}
+/* la voix est captée */
+.voice[data-mode="hearing"]{border-color:var(--good);background:color-mix(in srgb,var(--good) 10%,var(--sheet))}
+.voice[data-mode="hearing"] .vmic{background:var(--good);border-color:var(--good);color:#fff}
+.voice[data-mode="hearing"] .vmic .rings{animation:ring .7s ease-out infinite;box-shadow:0 0 0 8px color-mix(in srgb,var(--good) 40%,transparent)}
+.voice[data-mode="silent"]{border-color:var(--warn)}
+.voice[data-mode="silent"] .vmic{background:var(--warn);border-color:var(--warn);color:#fff}
+.voice[data-mode="error"]{border-color:var(--danger)}
+.voice .dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
+.voice[data-mode="hearing"] .vstate{color:var(--good)}
+.voice[data-mode="listening"] .vstate{color:var(--blue)}
+.voice[data-mode="silent"] .vstate{color:var(--warn)}
+.voice[data-mode="error"] .vstate{color:var(--danger)}
+@media (prefers-reduced-motion:reduce){.vmic .rings{animation:none!important}}
+@media (max-width:520px){.voice{padding:12px}.vmic{width:60px;height:60px}}
+
+/* Entretien sur mobile / écran étroit : panneau du recruteur compact pour garder le micro et la conversation à l'écran */
+@media (max-width:920px){
+  .room{gap:12px}
+  .recruiter{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"av who clock" "bar bar bar" "st st st" "act act act";align-items:center;gap:8px 12px;padding:14px 16px;text-align:left}
+  .recruiter .avatar{grid-area:av;width:52px;height:52px;font-size:19px}
+  .recruiter .avatar::before,.recruiter .avatar::after{inset:-5px}
+  .recruiter .who{grid-area:who;min-width:0}
+  .recruiter .who b{font-size:16px}
+  .recruiter .who small{font-size:12.5px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .recruiter .clock{grid-area:clock;font-size:30px}
+  .recruiter .bar{grid-area:bar}
+  .recruiter .state{grid-area:st;justify-content:flex-start;min-height:0;font-size:13.5px}
+  .recruiter > .row{grid-area:act;justify-content:flex-start!important;gap:8px}
+  .recruiter > .row .btn{padding:7px 12px;font-size:13.5px;min-height:0}
+  .transcript{max-height:42vh;min-height:120px}
+}
