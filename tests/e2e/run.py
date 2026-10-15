@@ -14,6 +14,8 @@ from playwright.async_api import async_playwright
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "web"))
 LIB_DIR = os.environ.get("LIB_DIR")
 SHOTS = os.environ.get("SHOTS")
+if SHOTS:
+    os.makedirs(SHOTS, exist_ok=True)
 
 # ---------- données simulées ----------
 SUPABASE_STUB = """
@@ -182,8 +184,22 @@ async def t_lien_refuse_message_clair(b, base):
         check("analyze_offer" not in c.calls, "aucune analyse ne doit partir sans texte")
 
 
+LONG_CV = json.loads(json.dumps(CV))
+LONG_CV["rubriques"].update({"experiences": "Expériences professionnelles", "competences": "Compétences techniques et outils",
+                             "interets": "Centres d'intérêt et engagements associatifs"})
+LONG_CV["experiences"] = LONG_CV["experiences"] * 2  # CV de deux pages
+
+
 async def t_cv_depuis_linkedin_pdf_et_word(b, base):
-    async with Ctx(b, base) as c:
+    await cv_exports(b, base, CV, "cv", max_pages=1)
+
+
+async def t_cv_rubriques_longues_deux_pages(b, base):
+    await cv_exports(b, base, LONG_CV, "cvlong", max_pages=2)
+
+
+async def cv_exports(b, base, cv, tag, max_pages):
+    async with Ctx(b, base, ai={"structure_cv": cv}) as c:
         await c.open("#app")
         await c.page.fill("#offerText", "Chef de projet digital chez Helvetia Media à Lausanne. " * 4)
         await c.page.click("#analyzeBtn")
@@ -206,7 +222,7 @@ async def t_cv_depuis_linkedin_pdf_et_word(b, base):
             pdf = open(await (await d.value).path(), "rb").read()
             pages = len(re.findall(rb"/Type\s*/Page(?!s)", pdf))
             check(pdf.startswith(b"%PDF"), f"{name} : PDF invalide")
-            check(pages == 1, f"{name} : le CV tient sur {pages} pages au lieu d'une")
+            check(1 <= pages <= max_pages, f"{name} : le CV fait {pages} pages (maximum attendu : {max_pages})")
             check(b"FontFile2" in pdf, f"{name} : polices non intégrées au PDF")
             async with c.page.expect_download() as d:
                 await c.page.click("#dlThemeDocx")
@@ -216,8 +232,8 @@ async def t_cv_depuis_linkedin_pdf_et_word(b, base):
             check("Camille Rochat" in doc and "Le Temps" in doc, f"{name} : contenu absent du Word")
             check("[Content_Types].xml" in z.namelist() and "word/styles.xml" in z.namelist(), f"{name} : Word incomplet")
             if SHOTS:
-                open(os.path.join(SHOTS, f"cv_{name}.pdf"), "wb").write(pdf)
-                open(os.path.join(SHOTS, f"cv_{name}.docx"), "wb").write(raw)
+                open(os.path.join(SHOTS, f"{tag}_{name}.pdf"), "wb").write(pdf)
+                open(os.path.join(SHOTS, f"{tag}_{name}.docx"), "wb").write(raw)
         c.no_js_errors()
 
 
