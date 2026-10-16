@@ -95,3 +95,12 @@ Deno.test("page vide ou réservée aux membres : message clair", async () => {
   mock({ "https://jobs.exemple.ch/robots.txt": { status: 404, body: "" }, [url2]: { status: 403, body: "Forbidden" } });
   await assertRejects(() => fetchOffer(url2), Error, "fetch_blocked");
 });
+
+import { voiceFor } from "../_shared/tts.ts";
+Deno.test("voix naturelle : voix stable, féminine ou masculine selon le recruteur", () => {
+  const a = voiceFor("Claire Morel", "fr"), b = voiceFor("Claire Morel", "fr"), m = voiceFor("Marc Rochat", "fr");
+  assertEquals(a.name, b.name);
+  assert(/^fr-FR-Chirp3-HD-(Aoede|Kore|Leda)$/.test(a.name), a.name);
+  assert(/^fr-FR-Chirp3-HD-(Charon|Orus|Fenrir)$/.test(m.name), m.name);
+  assertEquals(voiceFor("Anna Keller", "de").languageCode, "de-DE");
+});

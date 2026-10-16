@@ -6,6 +6,7 @@ import {
 } from "../_shared/common.ts";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { fetchOffer } from "../_shared/fetch_offer.ts";
+import { synthesize } from "../_shared/tts.ts";
 
 type Kind = "analyze" | "cv" | "letter" | "interview" | "turn" | "eval";
 const LANGS = ["fr", "en", "de", "it"] as const;
@@ -222,7 +223,8 @@ ${cvText || "(non fourni : base-toi sur l'offre)"}`;
   return metered(db, uid, "interview", ip, { context, lang }, async (res) => {
     const r = await llm({ tier: "quick", maxTokens: 600, system: context,
       messages: [{ role: "user", content: "Commence maintenant : salue en une phrase, présente-toi, puis pose ta première question." }] });
-    return { value: { sessionId: res.session_id, persona: { name: persona[0], role: persona[1] }, text: r.text }, cost: r.cost };
+    const v = await synthesize(r.text, persona[0], lang);
+    return { value: { sessionId: res.session_id, persona: { name: persona[0], role: persona[1] }, text: r.text, audio: v.audio }, cost: r.cost + v.cost };
   });
 }
 
@@ -237,7 +239,9 @@ async function interviewTurn(db: SupabaseClient, uid: string, ip: string | null,
   return metered(db, uid, "turn", ip, { session }, async (res) => {
     const r = await llm({ tier: "quick", maxTokens: 600, system: res.context,
       messages: [{ role: "user", content: "Commence maintenant : salue en une phrase, présente-toi, puis pose ta première question." }, ...history] });
-    return { value: { text: r.text }, cost: r.cost };
+    const persona = (res.context ?? "").match(/^Tu joues ([^,]+),/)?.[1] ?? "";
+    const v = await synthesize(r.text, persona, res.lang ?? "fr");
+    return { value: { text: r.text, audio: v.audio }, cost: r.cost + v.cost };
   });
 }
 

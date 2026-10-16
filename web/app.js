@@ -1186,9 +1186,30 @@ function fillVoices(){
 if("speechSynthesis" in window){loadVoices();speechSynthesis.onvoiceschanged=loadVoices}else loadVoices();
 $("#ivLang").addEventListener("change",fillVoices);
 
-function speak(text){
+/* Voix naturelle (audio préparé par le serveur) : un seul lecteur, débloqué au premier appui (exigence iPhone) */
+const ivAudio=new Audio(); ivAudio.preload="auto"; ivAudio.setAttribute("playsinline","");
+function silentWav(){const n=800,b=new ArrayBuffer(44+n),v=new DataView(b),w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));
+  w(0,"RIFF");v.setUint32(4,36+n,true);w(8,"WAVE");w(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,8000,true);v.setUint32(28,8000,true);v.setUint16(32,1,true);v.setUint16(34,8,true);w(36,"data");v.setUint32(40,n,true);for(let i=0;i<n;i++)v.setUint8(44+i,128);
+  return URL.createObjectURL(new Blob([b],{type:"audio/wav"}))}
+function unlockAudio(){ if(IV.audioUnlocked)return; IV.audioUnlocked=true; try{ivAudio.src=silentWav();const p=ivAudio.play();if(p&&p.catch)p.catch(()=>{})}catch(e){} }
+function playAudio(b64){
   return new Promise(res=>{
-    IV.lastSpoken=text;
+    let done=false; const fin=ok=>{if(!done){done=true;ivAudio.onended=ivAudio.onerror=null;res(ok)}};
+    try{
+      ivAudio.onended=()=>fin(true); ivAudio.onerror=()=>fin(false);
+      ivAudio.src="data:audio/mpeg;base64,"+b64;
+      const p=ivAudio.play(); if(p&&p.catch)p.catch(()=>fin(false));
+      setTimeout(()=>fin(true),Math.max(8000,b64.length*0.75*8/24+4000)); // garde-fou : durée max du MP3 (≥ 24 kbit/s) + marge
+    }catch(e){fin(false)}
+  });
+}
+async function speak(text,audio){
+  IV.lastSpoken=text; IV.lastAudio=audio||null;
+  if(audio&&!IV.muted){ IV.natural=true; if(await playAudio(audio)) return; }
+  return speakBrowser(text);
+}
+function speakBrowser(text){
+  return new Promise(res=>{
     if(IV.muted||!("speechSynthesis" in window)){setTimeout(res,Math.min(6000,600+text.length*25));return}
     try{
       if(speechSynthesis.speaking||speechSynthesis.pending) speechSynthesis.cancel();
@@ -1312,9 +1333,9 @@ async function interviewerTurn(){
   setState("thinking");
   IV.ctl=new AbortController();
   try{
-    const {text}=await api("interview_turn",{sessionId:IV.session,history:IV.turns},{signal:IV.ctl.signal});
+    const {text,audio}=await api("interview_turn",{sessionId:IV.session,history:IV.turns},{signal:IV.ctl.signal});
     if(IV.ended)return;
-    await askQuestion(text); if(IV.ended)return;
+    await askQuestion(text,audio); if(IV.ended)return;
     if(IV.remaining<=0)return endInterview();
     setState("answering");
   }catch(e){
@@ -1335,16 +1356,17 @@ async function sendAnswer(){
 }
 $("#sendBtn").onclick=sendAnswer;
 $("#answerBox").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendAnswer()}});
-$("#muteBtn").onclick=()=>{IV.muted=!IV.muted;$("#muteBtn").textContent=IV.muted?"Activer le son":"Couper le son";if(IV.muted&&"speechSynthesis" in window)speechSynthesis.cancel()};
-$("#replayBtn").onclick=()=>{unlockSpeech();if(IV.lastSpoken&&!IV.muted&&IV.state==="answering"){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(IV.lastSpoken);const v=voices.find(x=>x.name===$("#ivVoice").value);if(v)u.voice=v;speechSynthesis.speak(u)}catch(e){}}};
+$("#muteBtn").onclick=()=>{IV.muted=!IV.muted;$("#muteBtn").textContent=IV.muted?"Activer le son":"Couper le son";if(IV.muted){try{ivAudio.pause()}catch(e){} if("speechSynthesis" in window)speechSynthesis.cancel()}};
+$("#replayBtn").onclick=()=>{unlockSpeech();if(IV.lastAudio&&!IV.muted&&IV.state==="answering"){playAudio(IV.lastAudio);return}if(IV.lastSpoken&&!IV.muted&&IV.state==="answering"){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(IV.lastSpoken);const v=voices.find(x=>x.name===$("#ivVoice").value);if(v)u.voice=v;speechSynthesis.speak(u)}catch(e){}}};
 $("#ivEnd").onclick=()=>endInterview(true);
 
-async function askQuestion(text){
+async function askQuestion(text,audio){
   const q=text.trim(); IV.turns.push({role:"assistant",content:q}); IV.asked.push(q.slice(0,180));
-  bubble("r",q); setState("speaking"); await speak(q);
+  bubble("r",q); setState("speaking"); await speak(q,audio);
 }
 const IS_IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
 function unlockSpeech(){
+  unlockAudio();
   // Safari (iPhone, iPad) n'autorise la voix que si la première phrase est lancée pendant un toucher
   if(!("speechSynthesis" in window)||IV.unlocked)return;
   try{const u=new SpeechSynthesisUtterance(" ");u.volume=0;u.rate=2;speechSynthesis.speak(u);IV.unlocked=true}catch(e){}
@@ -1359,14 +1381,14 @@ $("#ivStart").onclick=async()=>{
     IV.lang=$("#ivLang").value;
     const avoid=store.get(offerKey(),{asked:[]}).asked.slice(-30);
     const r=await api("interview_start",{offer:S.offer.info,cvText:(S.adaptedText||(S.cv&&S.cv.text)||"").slice(0,40000),lang:IV.lang,style:$("#ivStyle").value,avoid});
-    Object.assign(IV,{turns:[],asked:[],remaining:DURATION,ended:false,timeUp:false,retry:false,last:performance.now(),session:r.sessionId,persona:[r.persona.name,r.persona.role]});
+    Object.assign(IV,{natural:false,lastAudio:null,turns:[],asked:[],remaining:DURATION,ended:false,timeUp:false,retry:false,last:performance.now(),session:r.sessionId,persona:[r.persona.name,r.persona.role]});
     $("#rName").textContent=IV.persona[0]; $("#rRole").textContent=IV.persona[1]+(S.offer.info.entreprise?" · "+S.offer.info.entreprise:"");
     $("#avatar").textContent=IV.persona[0].split(" ").map(w=>w[0]).join("");
     $("#transcript").innerHTML=""; $("#ivSetup").hidden=true; $("#ivResult").hidden=true; $("#ivRoom").hidden=false;
     $("#voicePanel").hidden=false; $("#liveText").textContent=""; micIdle();
     if(IS_IOS) toast("Tu n'entends rien ? Désactive le mode silencieux de ton iPhone et monte le volume.");
     clearInterval(IV.timer); IV.timer=setInterval(tick,250); tick();
-    await askQuestion(r.text); if(IV.ended)return;
+    await askQuestion(r.text,r.audio); if(IV.ended)return;
     setState("answering");
   }catch(e){fail("#ivMsg",e)}finally{busy(btn,false)}
 };
@@ -1376,7 +1398,7 @@ async function endInterview(early){
   try{IV.ctl&&IV.ctl.abort()}catch(e){}
   clearInterval(IV.timer);
   const closing={fr:"Merci, c'est terminé pour moi. Je vous fais un retour dans un instant.",en:"Thank you, that's all from me. I'll give you feedback in a moment.",de:"Vielen Dank, das war's von meiner Seite. Gleich bekommen Sie ein Feedback.",it:"Grazie, per me è tutto. Tra un attimo le do un riscontro."}[IV.lang];
-  bubble("r",closing); setState("evaluating"); speak(closing);
+  bubble("r",closing); setState("evaluating"); if(!IV.natural) speakBrowser(closing); else try{ivAudio.pause()}catch(e){}
   const answered=IV.turns.filter(t=>t.role==="user").length;
   const used=Math.round(DURATION-IV.remaining);
   // mémorise les questions posées pour ne pas les reposer

@@ -540,6 +540,15 @@ async def t_admin_refuse_aux_autres(b, base):
 IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0 Mobile/15E148 Safari/604.1"
 
 
+async def t_entretien_voix_naturelle_puis_secours(b, base):
+    # audio du serveur illisible ici : la question doit quand même passer (voix du navigateur en secours) et le micro s'ouvrir
+    ai = dict(IV_AI); ai["interview_start"] = dict(IV_AI["interview_start"], audio="SUQzBAAAAAAA")
+    async with Ctx(b, base, ai=ai, init=FAKE_VOICE) as c:
+        await start_interview(c, "talk")
+        await c.page.wait_for_selector('#voicePanel[data-mode="hearing"]', timeout=12000)
+        c.no_js_errors()
+
+
 async def t_entretien_iphone_micro_par_appui(b, base):
     async with Ctx(b, base, 390, 844, ai=IV_AI, init=FAKE_VOICE, ua=IPHONE_UA) as c:
         await start_interview(c, "talk")
