@@ -87,7 +87,7 @@ p{margin:0}
 label{font-family:var(--f-display);font-weight:600;font-size:14px;display:block;margin-bottom:7px;color:var(--ink)}
 
 /* ---------- Contrôles ---------- */
-input[type=text],input[type=url],input[type=search],textarea,select{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:var(--r-ctl);padding:11px 13px;transition:border-color .15s,background .15s,box-shadow .15s}
+input[type=text],input[type=url],input[type=search],input[type=date],textarea,select{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:var(--r-ctl);padding:11px 13px;transition:border-color .15s,background .15s,box-shadow .15s}
 input:hover,textarea:hover,select:hover{border-color:var(--line-2)}
 input:focus,textarea:focus,select:focus{outline:none;border-color:var(--blue);background:var(--sheet);box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 18%,transparent)}
 textarea{resize:vertical;min-height:120px;line-height:1.55}
@@ -168,8 +168,8 @@ ul.clean{margin:0;padding-left:20px} ul.clean li{margin:3px 0} ul.clean li::mark
 
 .section{padding-block:56px;border-top:1px solid var(--line)}
 .section h2{font-size:clamp(26px,3.2vw,36px);max-width:22ch}
-.how{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px;margin:30px 0 0;padding:0;list-style:none;counter-reset:how}
-@media (max-width:860px){.how{grid-template-columns:minmax(0,1fr);gap:22px}}
+.how{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:28px;margin:30px 0 0;padding:0;list-style:none;counter-reset:how}
+@media (max-width:1000px){.how{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:640px){.how{grid-template-columns:minmax(0,1fr);gap:22px}}
 .how li{counter-increment:how;display:flex;flex-direction:column;gap:8px;padding-top:18px;border-top:2px solid var(--ink)}
 .how li::before{content:counter(how);font-family:var(--f-display);font-weight:800;font-size:15px;color:var(--blue)}
 .how h3{font-size:19px}
@@ -470,3 +470,65 @@ section[data-step].enter{animation:stepin .32s var(--ease)}
 .adm-info{display:flex;flex-direction:column;gap:6px}
 @media (max-width:640px){.adm-user{grid-template-columns:1fr auto}.adm-user .use{grid-column:1;text-align:left}.adm-user .btn{grid-row:1;grid-column:2}}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Espaces de l'app : candidatures, offres d'emploi, dossier */
+.apptabs{display:flex;gap:6px;padding:5px;margin:4px 0 18px;background:var(--sheet);border:1px solid var(--line);border-radius:14px;overflow-x:auto;scrollbar-width:none}
+.apptabs::-webkit-scrollbar{display:none}
+.apptabs button{appearance:none;border:0;background:transparent;color:var(--ink-2);font:inherit;font-family:var(--f-display);font-weight:600;font-size:15px;padding:10px 14px;border-radius:10px;display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;flex:1 0 auto;justify-content:center}
+.apptabs button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.apptabs button[aria-current="page"]{background:var(--ink);color:var(--on-ink)}
+.apptabs button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.apptabs .count{font-size:12.5px;padding:1px 7px;border-radius:999px;background:color-mix(in srgb,currentColor 14%,transparent)}
+.apptabs .count:empty{display:none}
+.dash-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.dash-head h2{margin:0 0 4px}
+.dash-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.dash-stat{background:var(--sheet);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.dash-stat b{font-family:var(--f-display);font-size:24px;line-height:1.1}
+.dash-stat span{font-size:13px;color:var(--ink-2)}
+.dash-stat.alert{border-color:var(--warn)}
+.dash-stat.alert b{color:var(--warn)}
+.dash-filter button{appearance:none;cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--sheet);color:var(--ink-2)}
+.dash-filter button[aria-pressed="true"]{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.dash-list{display:flex;flex-direction:column;gap:10px}
+.app-card{background:var(--sheet);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center;box-shadow:var(--shadow-sheet)}
+.app-card h3{margin:0;font-size:17px;overflow-wrap:anywhere}
+.app-card .meta{font-size:13.5px;color:var(--ink-2);margin-top:2px;overflow-wrap:anywhere}
+.app-card .tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.app-card .acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.app-card select{width:auto;padding:7px 10px;font-size:14px}
+.app-card.due{border-color:var(--warn)}
+.st-todo{--st:var(--ink-2)} .st-applied{--st:var(--blue)} .st-interview{--st:#8A5CF6} .st-offer{--st:var(--good)} .st-rejected{--st:var(--danger)} .st-archived{--st:var(--line-2)}
+.app-card{border-left:4px solid var(--st,var(--line))}
+.dash-empty{text-align:center;padding:34px 18px;border:1px dashed var(--line-2);border-radius:16px;color:var(--ink-2)}
+@media (max-width:640px){.app-card{grid-template-columns:1fr}.app-card .acts{justify-content:flex-start}}
+.dossier-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--sheet);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:6px}
+.dossier-title{display:flex;flex-direction:column;min-width:0;flex:1 1 220px}
+.dossier-title b{font-family:var(--f-display);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dossier-bar select{width:auto;padding:8px 10px;font-size:14px}
+.dos-more{flex:1 1 100%}
+.dos-more summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--blue);padding:4px 0}
+.dos-more[open] summary{margin-bottom:8px}
+/* Offres d'emploi */
+.jobs-form{display:grid;grid-template-columns:2fr 1.3fr minmax(110px,.8fr) auto;gap:10px;align-items:end}
+@media (max-width:720px){.jobs-form{grid-template-columns:1fr 1fr}.jobs-form>div:first-child,.jobs-form .btn{grid-column:1/-1}}
+.jobs-list{display:flex;flex-direction:column;gap:10px}
+.job-card{background:var(--sheet);border:1px solid var(--line);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;box-shadow:var(--shadow-sheet)}
+.job-card h3{margin:0;font-size:17px}
+.job-card .meta{font-size:13.5px;color:var(--ink-2)}
+.job-card p{margin:0;font-size:14.5px;color:var(--ink);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.job-card .row{margin-top:4px}
+/* Score ATS */
+.ats{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
+.ats-gauge{--v:0;width:96px;height:96px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--c,var(--blue)) calc(var(--v)*1%),var(--line) 0);position:relative}
+.ats-gauge::before{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--sheet)}
+.ats-gauge b{position:relative;font-family:var(--f-display);font-size:28px;line-height:1}
+.ats-gauge small{position:relative;display:block;font-size:11px;color:var(--ink-2);text-align:center}
+.ats-crit{display:flex;flex-direction:column;gap:7px}
+.ats-crit div{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:8px;font-size:13.5px;align-items:center}
+.ats-crit i{grid-column:1/-1;height:6px;border-radius:9px;background:var(--line);overflow:hidden}
+.ats-crit i::after{content:"";display:block;height:100%;width:calc(var(--v)*1%);background:var(--c,var(--blue))}
+.ats-list{margin:4px 0 0;padding-left:18px;font-size:14px}
+.ats-list li{margin:3px 0}
+.chip-miss{background:color-mix(in srgb,var(--warn) 12%,transparent);color:var(--warn);border-color:transparent}
+.tr-letter{margin-top:4px}

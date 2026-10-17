@@ -62,6 +62,8 @@ function errMsg(e){
     case "free_budget_exhausted":return `L'offre Découverte est très demandée aujourd'hui : réessaie demain, ou <a href="#" data-open-plans>passe à une offre payante</a>.`;
     case "blocked":return "Ce compte est suspendu. Écris-nous si tu penses que c'est une erreur.";
     case "session_over":return "Le temps de cet entretien est écoulé.";
+    case "jobs_not_configured":return "La recherche d'offres n'est pas encore activée sur Postula. En attendant, colle le lien d'une annonce dans « Dossier en cours ».";
+    case "jobs_unavailable":return "Le service d'offres d'emploi ne répond pas pour le moment. Réessaie dans quelques minutes.";
     case "scan_unreadable":return "Le texte de ce CV en image n'a pas pu être lu. Utilise si possible un CV Word, ou un PDF exporté depuis Word ou Canva en « PDF standard ».";
     case "too_large":return "Le document est trop long. Utilise un CV de 5 pages maximum et une annonce plus courte.";
     case "offer_too_short":return "Colle le texte complet de l'annonce (au moins quelques lignes).";
@@ -105,7 +107,7 @@ function renderAuth(){
   if(inApp){
     const email=session.user.email||"", name=(session.user.user_metadata&&session.user.user_metadata.full_name)||email;
     $("#accEmail").textContent=email; $("#accInitial").textContent=(name.trim()[0]||"·").toUpperCase();
-    refreshAccount(); restoreCv();
+    refreshAccount(); restoreCv(); if(typeof loadApps==="function") loadApps();
   }
 }
 async function refreshAccount(){
@@ -321,6 +323,7 @@ $("#analyzeBtn").onclick=async()=>{
   analyzing=(async()=>{try{need();busy(btn,true,"Analyse…");
     const info=await api("analyze_offer",{offerText:text,offerUrl:offerUrl.value.slice(0,500)});
     info._src=text.slice(0,400); S.offer.info=info; store.set("offerInfo",info); renderOffer(); markDone(1); toast("Offre analysée");
+    appFromOffer(info,text);
     if(info.langue&&["fr","en","de","it"].includes(info.langue)) $("#ivLang").value=info.langue;
     updateKw();
   }catch(e){fail("#offerMsg",e)}finally{busy(btn,false)}})();
@@ -462,6 +465,7 @@ $("#forgetCv").onclick=async()=>{
 };
 function useProfileText(text,restored){
   show("#cvMsg",""); S.changes=[];S.adaptedBlob=null;S.adaptedText="";S.cvData=null;S.themePdf=null;S.photo=null;$("#photoRow").hidden=true;
+  S.ats=null;S.atsBase=null;S.trBlob=null;$("#dlTrDocx").hidden=true;
   $("#changesCard").hidden=true;$("#dlDocx").hidden=true;$("#dlThemePdf").hidden=true;$("#dlThemeDocx").hidden=true;$("#kwBox").hidden=true;
   S.cv={kind:"text",name:"Profil LinkedIn",text:text.slice(0,40000)};
   $("#dropTitle").textContent="Profil LinkedIn"; $("#dropSub").textContent="Texte collé · mis en forme avec le thème choisi ci-dessous";
@@ -486,6 +490,7 @@ async function restoreCv(){
 }
 async function loadCv(f,restored){
   show("#cvMsg",""); S.changes=[];S.adaptedBlob=null;S.adaptedText="";S.cvData=null;S.themePdf=null;S.photo=null;$("#photoRow").hidden=true;
+  S.ats=null;S.atsBase=null;S.trBlob=null;$("#dlTrDocx").hidden=true;
   $("#changesCard").hidden=true;$("#dlDocx").hidden=true;$("#dlThemePdf").hidden=true;$("#kwBox").hidden=true;
   const name=f.name, ext=name.split(".").pop().toLowerCase();
   if(!["docx","pdf"].includes(ext)){show("#cvMsg","Format non pris en charge. Utilise un fichier .docx (Word) ou .pdf.","err");return}
@@ -520,6 +525,7 @@ async function loadCv(f,restored){
     if(!restored||(S.cv.scanned&&!restored.ocr)) cvStore.save({name,type:f.type,buf:buf.slice(0),ocr:S.cv.scanned||null,savedAt:Date.now()});
     $("#cvSaved").hidden=false;
     if(S.offer.info) renderOffer();
+    if(curApp) saveApp({cv_name:name.slice(0,300)},true);
   }catch(e){
     $("#dropSub").textContent="ou clique pour choisir un fichier .docx ou .pdf";
     if(e&&e.code){ $("#dropTitle").textContent="Dépose ton CV ici"; $("#dropSub").textContent="ou clique pour choisir un fichier .docx ou .pdf"; fail("#cvMsg",e); return }
@@ -747,6 +753,7 @@ $("#photoFile").addEventListener("change",async()=>{
 /* Couverture des mots-clés */
 function kwCover(text){const kws=(S.offer.info&&S.offer.info.mots_cles_ats)||[];const t=(text||"").toLowerCase();return kws.map(k=>({k,ok:t.includes(String(k).toLowerCase())}))}
 function updateKw(){
+  renderAts();
   if(!S.cv||!S.offer.info)return;
   const before=kwCover(S.cv.text), after=kwCover(S.adaptedText||S.cv.text);
   if(!before.length)return;
@@ -1112,9 +1119,10 @@ function segInit(id,key){$$(`#${id} button`).forEach(b=>b.onclick=()=>{$$(`#${id
 segInit("toneSeg","tone"); segInit("lenSeg","len");
 const letterText=$("#letterText");
 letterText.value=store.get("letter","");
-function letterReady(){const ok=!!letterText.value.trim();["#dlLetterDocx","#dlLetterPdf","#copyLetter"].forEach(s=>$(s).disabled=!ok)}
+function letterReady(){const ok=!!letterText.value.trim();["#dlLetterDocx","#dlLetterPdf","#copyLetter","#trLetterBtn"].forEach(s=>$(s).disabled=!ok)}
 letterReady();
-letterText.addEventListener("input",()=>{store.set("letter",letterText.value);letterReady()});
+let letterSaveT=null;
+letterText.addEventListener("input",()=>{store.set("letter",letterText.value);letterReady();clearTimeout(letterSaveT);letterSaveT=setTimeout(()=>{if(curApp)saveApp({letter:letterText.value.slice(0,20000)},true)},1200)});
 let letterCtl=null;
 $("#letterStop").onclick=()=>letterCtl&&letterCtl.abort();
 $("#letterBtn").onclick=async()=>{
@@ -1130,7 +1138,7 @@ $("#letterBtn").onclick=async()=>{
   try{need();busy(btn,true,"Rédaction…"); letterText.value="";letterText.placeholder="Rédaction de ta lettre en cours (20 à 40 secondes)…";
     const r=await api("letter",{offer:o,offerText:offerText.value.slice(0,15000),cvText:cvText.slice(0,40000),notes:$("#letterNotes").value.slice(0,2000),tone:S.tone,len:S.len,lang:o.langue||"fr"},{signal:letterCtl.signal});
     letterText.value=r.text;
-    store.set("letter",letterText.value); markDone(3);
+    store.set("letter",letterText.value); markDone(3); saveApp({letter:r.text.slice(0,20000)},true);
   }catch(e){ if(e&&e.text)letterText.value=e.text; fail("#letterMsg",e) }
   finally{busy(btn,false);$("#letterStop").hidden=true;letterText.placeholder="La lettre apparaîtra ici pendant sa rédaction.";letterReady()}
 };
@@ -1414,6 +1422,8 @@ async function endInterview(early){
     const att={date:Date.now(),note:Math.max(0,Math.min(10,Number(ev.note)||0)),ev,persona:IV.persona[0]};
     mem.attempts=[...(mem.attempts||[]),{date:att.date,note:att.note}].slice(-12); mem.last=att; store.set(key,mem);
     markDone(4); showResult(att,mem.attempts);
+    if(curApp){const a=APPS.find(x=>x.id===curApp);const sc=[...((a&&a.scores)||[]),{at:new Date(att.date).toISOString(),note:att.note}].slice(-30);
+      saveApp({scores:sc})}
   }catch(e){
     $("#ivRoom").hidden=true;$("#ivSetup").hidden=false; fail("#ivMsg",e);
   }
@@ -1456,7 +1466,284 @@ function refreshHistory(){
   if(mem.last){$("#lastEval").innerHTML=`<label>Dernier retour</label>`+evalHtml(mem.last)}
 }
 
+/* ---------- Score ATS ---------- */
+const textKey=t=>{let h=0;for(const c of String(t||"").slice(0,40000))h=(h*31+c.charCodeAt(0))|0;return h};
+const atsText=()=>S.adaptedText||(S.cv&&S.cv.text)||"";
+function renderAts(){
+  $("#atsBtn").disabled=!S.cv; $("#trCvBtn").disabled=!S.cv;
+  const a=S.ats, out=$("#atsOut");
+  if(!a){out.innerHTML="";$("#atsBtn").textContent="Calculer le score";return}
+  $("#atsBtn").textContent="Recalculer";
+  const col=v=>v>=75?"var(--good)":v>=50?"var(--warn)":"var(--danger)";
+  if(!a.criteres){out.innerHTML=`<p class="lede" style="margin:0">Dernier score enregistré pour ce dossier : <b>${a.score}/100</b>. Recalcule-le pour le détail.</p>`;return}
+  const stale=a._key!==textKey(atsText());
+  const before=S.atsBase!=null&&S.atsBase!==a.score&&a._adapted?`<p class="hint" style="margin:0">Avant adaptation : <b>${S.atsBase}/100</b> → maintenant <b>${a.score}/100</b></p>`:"";
+  out.innerHTML=`<div class="ats">
+      <div class="ats-gauge" style="--v:${a.score};--c:${col(a.score)}"><div><b>${a.score}</b><small>/ 100</small></div></div>
+      <div class="ats-crit">${(a.criteres||[]).map(c=>`<div title="${esc(c.commentaire)}"><span>${esc(c.nom)}</span><b>${c.note}</b><i style="--v:${c.note};--c:${col(c.note)}"></i></div>`).join("")}</div>
+    </div>
+    ${a.verdict?`<p style="margin:0">${esc(a.verdict)}</p>`:""}${before}
+    ${stale?`<div class="msg info">Ton CV a changé depuis ce calcul : recalcule pour voir le nouveau score.</div>`:""}
+    ${(a.mots_cles_manquants||[]).length?`<div><label>Mots-clés de l'offre absents de ton CV</label><div class="chips">${a.mots_cles_manquants.map(k=>`<span class="pill chip-miss">${esc(k)}</span>`).join("")}</div><p class="hint">À ajouter seulement s'ils sont vrais pour toi. « Adapter à l'offre » les intègre quand ton parcours le permet.</p></div>`:""}
+    ${(a.problemes||[]).length?`<div><label>À corriger</label><ul class="ats-list">${a.problemes.map(p=>`<li><b>${esc(p.titre)}</b> : ${esc(p.conseil)}</li>`).join("")}</ul></div>`:""}`;
+}
+$("#atsBtn").onclick=async()=>{
+  const btn=$("#atsBtn"); show("#atsMsg","");
+  if(!S.cv)return;
+  if(!(await ensureOffer("#atsMsg")))return;
+  const text=atsText();
+  if(text.trim().length<60){show("#atsMsg","Le texte de ton CV est trop court pour être évalué.","err");return}
+  try{need();busy(btn,true,"Analyse ATS…");
+    const r=await api("ats_score",{offer:S.offer.info,cvText:text.slice(0,40000)});
+    const adapted=!!S.adaptedText;
+    if(!adapted) S.atsBase=r.score;
+    S.ats={...r,_key:textKey(text),_adapted:adapted}; renderAts();
+    saveApp({ats_score:r.score},true);
+  }catch(e){fail("#atsMsg",e)}finally{busy(btn,false);renderAts()}
+};
+
+/* ---------- Traduction ---------- */
+const TR_FIXED=/^[\s•·\-–—*▪●◦○■□►▸✓✔|:;,.()\[\]\/]*$/;
+const LANG_FR={en:"anglais",de:"allemand",it:"italien",fr:"français"};
+$("#trCvBtn").onclick=async()=>{
+  const btn=$("#trCvBtn"), lang=$("#trLang").value; show("#trMsg","");
+  if(!S.cv)return;
+  try{need();busy(btn,true,"Traduction…");
+    if(S.cv.kind==="docx"){
+      const src=S.adaptedBlob?await S.adaptedBlob.arrayBuffer():S.cv.buf;
+      const d=await parseDocx(src);
+      const sent=d.paras.map((x,i)=>{const idx=x.segs.map((g,k)=>TR_FIXED.test(g.text)?-1:k).filter(k=>k>=0);return {i,idx,s:idx.map(k=>x.segs[k].text)}}).filter(x=>x.s.length);
+      const r=await api("translate",{what:"cv_paras",lang,paras:sent.map(x=>({s:x.s}))});
+      const map=new Map(); let n=0;
+      (r.paras||[]).forEach((ns,j)=>{
+        const x=sent[j]; if(!x||!Array.isArray(ns))return;
+        if(ns.length!==x.s.length){ if(x.s.length===1) ns=[ns.join(" ").replace(/\s+/g," ").trim()]; else return; }
+        const p=d.paras[x.i], before=p.segs.map(g=>g.text), after=before.slice();
+        x.idx.forEach((k,m)=>{after[k]=String(ns[m]??"")});
+        map.set(before.join("\u0001"),after); setSegs(p.segs,after); n++;
+      });
+      d.fallbacks.forEach(f=>{const v=map.get(f.segs.map(s=>s.text).join("\u0001"));if(v&&v.length===f.segs.length)setSegs(f.segs,v)});
+      if(!n) throw {code:"ai_invalid_json"};
+      let xml=new XMLSerializer().serializeToString(d.dom);
+      if(!xml.startsWith("<?xml"))xml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'+xml;
+      d.zip.file("word/document.xml",xml);
+      S.trBlob=await d.zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",compression:"DEFLATE"});
+      S.trLang=lang; $("#dlTrDocx").hidden=false;
+      const v={[`Traduit (${LANG_FR[lang]})`]:el=>renderDocxInto(el,S.trBlob)};
+      if(S.adaptedBlob) v["CV adapté"]=el=>renderDocxInto(el,S.adaptedBlob);
+      v["Original"]=el=>renderDocxInto(el,new Blob([S.cv.buf]));
+      setViews(v,`Traduit (${LANG_FR[lang]})`);
+      show("#trMsg",`CV traduit en ${LANG_FR[lang]}, mise en page conservée. Relis-le avant de l'envoyer.`,"info");
+    }else{
+      if(!S.cvData){ await $("#themeBtn").onclick(); if(!S.cvData) return; }
+      const r=await api("translate",{what:"cv_data",lang,data:S.cvData});
+      if(!r||!r.data||typeof r.data!=="object") throw {code:"ai_invalid_json"};
+      S.cvData=r.data; await buildThemePdf();
+      show("#trMsg",`Version thème traduite en ${LANG_FR[lang]} : télécharge-la en PDF ou en Word ci-dessus.`,"info");
+    }
+  }catch(e){fail("#trMsg",e)}finally{busy(btn,false)}
+};
+$("#dlTrDocx").onclick=async()=>{if(!S.trBlob)return;const base=S.cv.name.replace(/\.docx$/i,"");await save(`${base} - ${LANG_FR[S.trLang]||S.trLang}.docx`,S.trBlob,"#trMsg")};
+$("#trLetterBtn").onclick=async()=>{
+  const t=letterText.value.trim(), lang=$("#trLetterLang").value, btn=$("#trLetterBtn"); show("#trLetterMsg","");
+  if(!t)return;
+  try{need();busy(btn,true,"Traduction…");
+    const r=await api("translate",{what:"letter",lang,text:t.slice(0,20000)});
+    S.letterOrig=t; letterText.value=r.text; store.set("letter",r.text); letterReady(); saveApp({letter:r.text.slice(0,20000)},true);
+    $("#trLetterUndo").hidden=false; show("#trLetterMsg",`Lettre traduite en ${LANG_FR[lang]}.`,"info");
+  }catch(e){fail("#trLetterMsg",e)}finally{busy(btn,false)}
+};
+$("#trLetterUndo").onclick=()=>{if(S.letterOrig==null)return;letterText.value=S.letterOrig;store.set("letter",S.letterOrig);letterReady();saveApp({letter:S.letterOrig.slice(0,20000)},true);$("#trLetterUndo").hidden=true;show("#trLetterMsg","")};
+
+/* ---------- Espaces : Mes candidatures / Offres d'emploi / Dossier en cours ---------- */
+function showView(v,scroll){
+  if(!["dash","jobs","dossier"].includes(v))v="dossier";
+  $("#viewDash").hidden=v!=="dash"; $("#viewJobs").hidden=v!=="jobs"; $("#viewDossier").hidden=v!=="dossier";
+  $$(".apptabs button").forEach(b=>{if(b.dataset.view===v)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current")});
+  store.set("view",v);
+  if(v==="dash") loadApps();
+  if(scroll){const top=$("#app").getBoundingClientRect().top+scrollY-70; if(scrollY>top) scrollTo({top,behavior:"smooth"})}
+}
+$$(".apptabs button").forEach(b=>b.onclick=()=>showView(b.dataset.view,true));
+
+/* ---------- Suivi des candidatures ---------- */
+const STATUS={todo:"À postuler",applied:"Envoyée",interview:"Entretien",offer:"Offre reçue",rejected:"Refusée",archived:"Archivée"};
+let APPS=[], curApp=store.get("curApp",null), appsLoaded=false, dashFilter=store.get("dashFilter","active");
+const fmtD=d=>d?new Date(d).toLocaleDateString("fr-CH",{day:"numeric",month:"short"}):"";
+const today=()=>new Date().toISOString().slice(0,10);
+function appDue(a){ // relance : date choisie atteinte, ou envoyée depuis 7 jours sans nouvelle
+  if(!["applied","interview"].includes(a.status))return false;
+  if(a.follow_up_at) return a.follow_up_at<=today();
+  return a.status==="applied"&&a.applied_at&&(Date.now()-new Date(a.applied_at))>7*864e5;
+}
+const bestScore=a=>(a.scores||[]).reduce((m,x)=>Math.max(m,Number(x.note)||0),0);
+async function loadApps(){
+  if(!session)return;
+  const {data,error}=await sb.from("applications").select("id,title,company,location,url,source,status,ats_score,scores,notes,applied_at,follow_up_at,created_at,updated_at,cv_name").order("updated_at",{ascending:false}).limit(500);
+  if(error){console.error(error);return}
+  APPS=data||[]; appsLoaded=true; renderDash(); renderDossierBar();
+}
+function renderDash(){
+  const active=APPS.filter(a=>a.status!=="archived");
+  $("#appsCount").textContent=active.length||"";
+  const n=s=>APPS.filter(a=>a.status===s).length, due=APPS.filter(appDue).length;
+  $("#dashStats").innerHTML=[
+    [active.length,"en cours"],[n("todo"),"à postuler"],[n("applied"),"envoyées"],[n("interview"),"en entretien"],[n("offer"),"offres reçues"],[due,"à relancer",due>0]
+  ].map(([v,l,al])=>`<div class="dash-stat${al?" alert":""}"><b>${v}</b><span>${l}</span></div>`).join("");
+  const F={active:"En cours",due:"À relancer",todo:STATUS.todo,applied:STATUS.applied,interview:STATUS.interview,offer:STATUS.offer,rejected:STATUS.rejected,archived:STATUS.archived,all:"Toutes"};
+  $("#dashFilter").innerHTML=Object.entries(F).map(([k,l])=>`<button type="button" data-f="${k}" aria-pressed="${k===dashFilter}">${l}</button>`).join("");
+  const list=APPS.filter(a=>dashFilter==="all"||(dashFilter==="active"?a.status!=="archived"&&a.status!=="rejected":dashFilter==="due"?appDue(a):a.status===dashFilter));
+  if(!APPS.length){$("#dashList").innerHTML=`<div class="dash-empty"><p><b>Aucune candidature pour l'instant.</b></p><p>Colle une offre ou cherche-en une : chaque offre analysée devient un dossier ici.</p><div class="row" style="justify-content:center"><button class="btn primary" type="button" data-dash="new">Nouvelle candidature</button><button class="btn" type="button" data-dash="jobs">Chercher des offres</button></div></div>`;return}
+  if(!list.length){$("#dashList").innerHTML=`<div class="dash-empty">Aucune candidature dans ce filtre.</div>`;return}
+  $("#dashList").innerHTML=list.map(a=>{
+    const best=bestScore(a), tries=(a.scores||[]).length, due=appDue(a);
+    const tags=[
+      a.ats_score!=null?`<span class="pill${a.ats_score>=75?" ok":a.ats_score<50?" miss":""}" title="Score ATS du CV">ATS ${a.ats_score}/100</span>`:"",
+      tries?`<span class="pill${best>=7?" ok":""}" title="Meilleure note d'entretien">Entretien ${best.toFixed(1)}/10 · ${tries} essai${tries>1?"s":""}</span>`:`<span class="pill">Pas encore d'entraînement</span>`,
+      a.applied_at?`<span class="pill">Envoyée le ${fmtD(a.applied_at)}</span>`:"",
+      due?`<span class="pill miss">À relancer${a.follow_up_at?" ("+fmtD(a.follow_up_at)+")":""}</span>`:(a.follow_up_at?`<span class="pill">Relance le ${fmtD(a.follow_up_at)}</span>`:""),
+      a.id===curApp?`<span class="pill ex">Dossier ouvert</span>`:""
+    ].join("");
+    return `<article class="app-card st-${a.status}${due?" due":""}" data-id="${a.id}">
+      <div><h3>${esc(a.title||"Offre sans titre")}</h3><div class="meta">${esc([a.company,a.location].filter(Boolean).join(" · ")||"—")} · mis à jour le ${fmtD(a.updated_at)}</div><div class="tags">${tags}</div>${a.notes?`<div class="meta" style="margin-top:6px">📝 ${esc(a.notes.slice(0,140))}${a.notes.length>140?"…":""}</div>`:""}</div>
+      <div class="acts">
+        <select data-status aria-label="Statut">${Object.entries(STATUS).map(([k,l])=>`<option value="${k}"${k===a.status?" selected":""}>${l}</option>`).join("")}</select>
+        <button class="btn sm primary" type="button" data-dash="open">Ouvrir</button>
+        <button class="btn sm" type="button" data-dash="train" title="Entretien d'entraînement pour cette offre">S'entraîner</button>
+        <button class="btn sm ghost" type="button" data-dash="del" aria-label="Supprimer">Supprimer</button>
+      </div></article>`}).join("");
+}
+$("#dashFilter").addEventListener("click",e=>{const b=e.target.closest("[data-f]");if(!b)return;dashFilter=b.dataset.f;store.set("dashFilter",dashFilter);renderDash()});
+$("#viewDash").addEventListener("change",async e=>{
+  const sel=e.target.closest("[data-status]"); if(!sel)return;
+  const id=sel.closest("[data-id]").dataset.id;
+  const {error}=await sb.from("applications").update({status:sel.value}).eq("id",id);
+  if(error){toast("Le statut n'a pas pu être enregistré");return}
+  toast(`Statut : ${STATUS[sel.value]}`); loadApps();
+});
+$("#viewDash").addEventListener("click",async e=>{
+  const b=e.target.closest("[data-dash]"); if(!b)return;
+  const act=b.dataset.dash, id=b.closest("[data-id]")?.dataset.id;
+  if(act==="new") return newApplication();
+  if(act==="jobs") return showView("jobs",true);
+  if(act==="open") return openApp(id,null);
+  if(act==="train") return openApp(id,4);
+  if(act==="del"){
+    const a=APPS.find(x=>x.id===id); if(!confirm(`Supprimer le dossier « ${a&&a.title||"offre"} » ? Sa lettre et ses notes seront effacées.`))return;
+    const {error}=await sb.from("applications").delete().eq("id",id);
+    if(error){toast("Suppression impossible");return}
+    if(id===curApp){curApp=null;store.set("curApp",null)}
+    toast("Dossier supprimé"); loadApps();
+  }
+});
+$("#newApp").onclick=newApplication;
+function newApplication(){
+  curApp=null; store.set("curApp",null);
+  offerText.value=""; offerUrl.value=""; store.set("offerText",""); store.set("offerUrl",""); syncExample();
+  S.offer.info=null; store.set("offerInfo",null); $("#offerOut").hidden=true; $("#offerEmpty").hidden=false;
+  letterText.value=""; store.set("letter",""); letterReady(); S.ats=null; renderAts();
+  renderDossierBar(); showView("dossier"); go(1,true); offerUrl.focus();
+}
+async function openApp(id,step){
+  const {data:a,error}=await sb.from("applications").select("*").eq("id",id).single();
+  if(error||!a){toast("Dossier introuvable");return}
+  curApp=a.id; store.set("curApp",curApp);
+  offerUrl.value=a.url||""; offerText.value=a.offer_text||""; store.set("offerUrl",offerUrl.value); store.set("offerText",offerText.value); syncExample();
+  lastLink=a.url||""; store.set("lastLink",lastLink);
+  if(a.offer_info){S.offer.info={...a.offer_info,_src:(a.offer_text||"").trim().slice(0,400)};store.set("offerInfo",S.offer.info);renderOffer();markDone(1)}
+  else{S.offer.info=null;$("#offerOut").hidden=true;$("#offerEmpty").hidden=false}
+  letterText.value=a.letter||""; store.set("letter",letterText.value); letterReady();
+  S.ats=a.ats_score!=null?{score:a.ats_score,_saved:true}:null; if(typeof renderAts==="function")renderAts();
+  if(a.offer_info&&a.offer_info.langue&&["fr","en","de","it"].includes(a.offer_info.langue)) $("#ivLang").value=a.offer_info.langue;
+  updateKw(); renderDossierBar(a); showView("dossier"); go(step||(a.offer_info?2:1),true);
+}
+function renderDossierBar(full){
+  const bar=$("#dossierBar"); const a=full||APPS.find(x=>x.id===curApp);
+  if(!curApp||!a){bar.hidden=true;return}
+  bar.hidden=false; $("#dosTitle").textContent=[a.title||"Offre sans titre",a.company].filter(Boolean).join(" – ");
+  const sel=$("#dosStatus"); sel.innerHTML=Object.entries(STATUS).map(([k,l])=>`<option value="${k}"${k===a.status?" selected":""}>${l}</option>`).join("");
+  if(full||document.activeElement!==$("#dosNotes")) $("#dosNotes").value=a.notes||"";
+  $("#dosFollow").value=a.follow_up_at||"";
+}
+$("#dosStatus").onchange=async()=>{await saveApp({status:$("#dosStatus").value});toast(`Statut : ${STATUS[$("#dosStatus").value]}`)};
+$("#dosFollow").onchange=()=>saveApp({follow_up_at:$("#dosFollow").value||null});
+let notesT=null; $("#dosNotes").addEventListener("input",()=>{clearTimeout(notesT);notesT=setTimeout(()=>saveApp({notes:$("#dosNotes").value.slice(0,5000)},true),700)});
+
+/* Enregistre dans le dossier en cours (le crée au besoin). quiet = pas de rechargement de la liste */
+let saving=Promise.resolve();
+function saveApp(patch,quiet){
+  if(!session)return Promise.resolve();
+  saving=saving.then(async()=>{
+    if(!curApp){
+      if(!S.offer.info)return;            // un dossier naît avec une offre analysée
+      const {data,error}=await sb.from("applications").insert(patch).select("id").single();
+      if(error){console.error(error);if(/applications_limit/.test(error.message||""))toast("Limite de 500 dossiers atteinte : supprime d'anciens dossiers.");return}
+      curApp=data.id; store.set("curApp",curApp);
+    }else{
+      const {error}=await sb.from("applications").update(patch).eq("id",curApp);
+      if(error){console.error(error);return}
+    }
+    if(!quiet) await loadApps(); else { const a=APPS.find(x=>x.id===curApp); if(a)Object.assign(a,patch) }
+  }).catch(e=>console.error(e));
+  return saving;
+}
+/* Nouvelle offre analysée : nouveau dossier si le texte diffère de celui du dossier ouvert */
+function appFromOffer(info,text){
+  const src=text.trim().slice(0,400);
+  if(curApp&&store.get("curAppSrc","")!==src){curApp=null;store.set("curApp",null)}
+  store.set("curAppSrc",src);
+  let host=""; try{host=new URL(offerUrl.value.trim()).hostname.replace(/^www\./,"")}catch(e){}
+  const clean={...info}; delete clean._src;
+  saveApp({title:String(info.poste||"").slice(0,300),company:String(info.entreprise||"").slice(0,300),location:String(info.lieu||"").slice(0,300),
+    url:offerUrl.value.trim().slice(0,1000),source:(S.jobSource||host).slice(0,60),offer_text:text.slice(0,15000),offer_info:clean,cv_name:(S.cv&&S.cv.name||"").slice(0,300)}).then(()=>{S.jobSource="";renderDossierBar()});
+}
+
+/* ---------- Offres d'emploi (Adzuna) ---------- */
+let jobsPage=1, jobsQuery=null, JOBS=[];
+$("#jobCountry").value=store.get("jobCountry","ch");
+$("#jobWhat").value=store.get("jobWhat",""); $("#jobWhere").value=store.get("jobWhere","");
+$("#jobsForm").addEventListener("submit",e=>{e.preventDefault();searchJobs(true)});
+$("#jobsMore").onclick=()=>searchJobs(false);
+async function searchJobs(reset){
+  const what=$("#jobWhat").value.trim(), where=$("#jobWhere").value.trim(), country=$("#jobCountry").value;
+  if(!what&&!where){show("#jobsMsg","Indique au moins un poste, un métier ou un lieu.","err");$("#jobWhat").focus();return}
+  store.set("jobWhat",what); store.set("jobWhere",where); store.set("jobCountry",country);
+  if(reset){jobsPage=1;JOBS=[]}else jobsPage++;
+  const btn=reset?$("#jobsBtn"):$("#jobsMore"); show("#jobsMsg","");
+  try{need();busy(btn,true,"Recherche…");
+    const r=await api("search_jobs",{what,where,country,page:jobsPage});
+    JOBS=JOBS.concat(r.jobs||[]); $("#jobsCredit").hidden=!JOBS.length;
+    $("#jobsMore").hidden=!(r.count>JOBS.length&&(r.jobs||[]).length);
+    if(!JOBS.length) show("#jobsMsg","Aucune offre trouvée. Essaie un intitulé plus large ou un autre lieu.","info");
+    else if(reset) show("#jobsMsg",`${r.count.toLocaleString("fr-CH")} offre${r.count>1?"s":""} trouvée${r.count>1?"s":""}.`,"info");
+    renderJobs();
+  }catch(e){fail("#jobsMsg",e)}finally{busy(btn,false)}
+}
+function renderJobs(){
+  const known=new Set(APPS.map(a=>a.url));
+  $("#jobsList").innerHTML=JOBS.map((j,i)=>`<article class="job-card">
+    <h3>${esc(j.title)}</h3>
+    <div class="meta">${esc([j.company,j.location].filter(Boolean).join(" · "))}${j.created?` · publiée le ${fmtD(j.created)}`:""}${j.salary?` · ${esc(j.salary)}`:""}${j.contract?` · ${esc(j.contract)}`:""}</div>
+    <p>${esc(j.description)}</p>
+    <div class="row">${known.has(j.url)?`<span class="pill ok">Déjà dans tes candidatures</span>`:`<button class="btn sm primary" type="button" data-job="${i}">Préparer ma candidature</button>`}<a class="btn sm ghost" href="${esc(j.url)}" target="_blank" rel="noopener nofollow">Voir l'annonce</a></div>
+  </article>`).join("");
+}
+$("#jobsList").addEventListener("click",async e=>{
+  const b=e.target.closest("[data-job]"); if(!b)return;
+  const j=JOBS[+b.dataset.job]; if(!j)return;
+  // nouveau dossier : on part de l'annonce complète si le site la donne, sinon du résumé Adzuna
+  curApp=null; store.set("curApp",null); S.offer.info=null; letterText.value=""; store.set("letter",""); letterReady(); S.ats=null; if(typeof renderAts==="function")renderAts();
+  S.jobSource="adzuna";
+  offerUrl.value=j.url; store.set("offerUrl",j.url);
+  offerText.value=[`Poste : ${j.title}`,j.company&&`Entreprise : ${j.company}`,j.location&&`Lieu : ${j.location}`,j.contract&&`Contrat : ${j.contract}`,"",j.description].filter(x=>x!==false&&x!==undefined).join("\n");
+  store.set("offerText",offerText.value); syncExample();
+  showView("dossier"); go(1,true);
+  lastLink=""; const ok=await readLink(true);
+  if(!ok){ show("#offerMsg","Voici le résumé de l'annonce. Pour un résultat plus précis, ouvre l'annonce (« Voir l'annonce ») et colle le texte complet ici.","info"); await $("#analyzeBtn").onclick(); }
+});
+
 go(store.get("step",1));
+showView(store.get("view","dossier"));
 
 /* ---------- App installable (PWA) ---------- */
 if("serviceWorker" in navigator&&location.protocol==="https:"){

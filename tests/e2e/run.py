@@ -23,6 +23,22 @@ window.supabase={createClient:function(){
   const app=location.hash.includes('app');
   const sess=app?{access_token:'test',user:{email:'test@example.ch',user_metadata:{full_name:'Test'}}}:null;
   return {auth:{getSession:async()=>({data:{session:sess}}),onAuthStateChange:()=>{},signInWithOAuth:async()=>({}),signOut:async()=>({})},
+    from:(table)=>{
+      const db=(window.__db=window.__db||{applications:[]}); const rows=db[table]=db[table]||[];
+      let op='select',patch=null,filt=[],single=false,lim=null;
+      const run=()=>{
+        let r=rows.filter(x=>filt.every(([k,v])=>x[k]===v));
+        if(op==='insert'){const row=Object.assign({id:crypto.randomUUID(),status:'todo',scores:[],notes:'',created_at:new Date().toISOString(),updated_at:new Date().toISOString()},patch);rows.unshift(row);r=[row]}
+        if(op==='update'){r.forEach(x=>Object.assign(x,patch,{updated_at:new Date().toISOString()}))}
+        if(op==='delete'){r.forEach(x=>rows.splice(rows.indexOf(x),1))}
+        if(lim)r=r.slice(0,lim);
+        return {data:single?(r[0]||null):r,error:null};
+      };
+      const q={select(){return q},insert(p){op='insert';patch=p;return q},update(p){op='update';patch=p;return q},delete(){op='delete';return q},
+        eq(k,v){filt.push([k,v]);return q},order(){return q},limit(n){lim=n;return q},single(){single=true;return q},maybeSingle(){single=true;return q},
+        then(res,rej){return Promise.resolve(run()).then(res,rej)}};
+      return q;
+    },
     rpc:async()=>({data:{plan:'monthly',active:true,subscription:true,customer:true,period_end:'2026-11-16T15:42:49Z',free_claimed:true,extra_interviews:0,
       quota:{cv:{limit:50,used:3},letter:{limit:50,used:1},interview:{limit:20,used:2},analyze:{limit:100,used:4}}}})};
 }};"""
@@ -568,6 +584,127 @@ async def t_entretien_appui_relance_si_rien_entendu(b, base):
         await c.page.click("#micBtn")
         await c.page.wait_for_selector('#voicePanel[data-mode="hearing"]', timeout=5000)
         await c.page.wait_for_function("document.querySelector('#answerBox').value.includes('sept ans')", timeout=5000)
+        c.no_js_errors()
+
+
+# ---------- suivi des candidatures, offres, ATS, traduction ----------
+OFFER_TXT = "Chef de projet digital chez Helvetia Media à Lausanne. Pilotage de projets web, méthodes agiles, SEO. " * 3
+
+
+async def t_candidature_creee_suivie_et_rouverte(b, base):
+    async with Ctx(b, base) as c:
+        await c.open("#app")
+        await c.page.click('.apptabs [data-view="dossier"]')
+        await c.page.fill("#offerText", OFFER_TXT)
+        await c.page.click("#analyzeBtn"); await c.page.wait_for_selector("#offerOut:not([hidden])")
+        await c.page.wait_for_selector("#dossierBar:not([hidden])", timeout=5000)
+        check("Chef de projet digital" in await c.page.inner_text("#dosTitle"), "le dossier n'a pas été créé à l'analyse de l'offre")
+        await c.step(3)
+        await c.page.fill("#letterNotes", "7 ans de gestion de projets web au journal Le Temps, refonte du site, équipe Scrum de 9 personnes.")
+        await c.page.click("#letterBtn"); await c.page.wait_for_timeout(1000)
+        apps = await c.page.evaluate("window.__db.applications")
+        check(len(apps) == 1 and apps[0]["letter"].startswith("Camille"), f"la lettre n'est pas enregistrée dans le dossier : {apps}")
+        await c.page.click('.apptabs [data-view="dash"]')
+        await c.page.wait_for_selector(".app-card", timeout=5000)
+        await c.page.select_option(".app-card [data-status]", "applied"); await c.page.wait_for_timeout(400)
+        apps = await c.page.evaluate("window.__db.applications")
+        check(apps[0]["status"] == "applied", "le statut n'a pas été enregistré")
+        await c.shot("candidatures")
+        # nouvelle candidature puis réouverture de l'ancienne
+        await c.page.click("#newApp")
+        check(await c.page.input_value("#offerText") == "", "« Nouvelle candidature » doit repartir d'une offre vide")
+        await c.page.click('.apptabs [data-view="dash"]'); await c.page.wait_for_selector(".app-card")
+        await c.page.click('.app-card [data-dash="open"]'); await c.page.wait_for_timeout(500)
+        check("Helvetia" in await c.page.input_value("#offerText"), "l'offre du dossier n'est pas restaurée")
+        check((await c.page.input_value("#letterText")).startswith("Camille"), "la lettre du dossier n'est pas restaurée")
+        c.no_js_errors()
+
+
+JOBS = {"count": 2, "jobs": [
+    {"id": "1", "title": "Chef de projet digital", "company": "Helvetia Media", "location": "Lausanne, Vaud", "description": "Pilotage de projets web et SEO pour nos marques.", "url": "https://www.adzuna.ch/land/ad/1", "created": "2026-10-15T08:00:00Z", "salary": "", "contract": "CDI"},
+    {"id": "2", "title": "Product owner", "company": "Manor", "location": "Bâle", "description": "Backlog e-commerce.", "url": "https://www.adzuna.ch/land/ad/2", "created": None, "salary": "90 000–110 000 CHF", "contract": ""}]}
+
+
+async def t_offres_emploi_recherche_et_dossier(b, base):
+    async with Ctx(b, base, ai={"search_jobs": JOBS, "fetch_offer": {"error": "fetch_blocked"}}) as c:
+        await c.open("#app")
+        await c.page.click('.apptabs [data-view="jobs"]')
+        await c.page.fill("#jobWhat", "chef de projet"); await c.page.fill("#jobWhere", "Lausanne")
+        await c.page.click("#jobsBtn"); await c.page.wait_for_selector(".job-card", timeout=5000)
+        q = [x for x in c.bodies if x.get("action") == "search_jobs"][0]
+        check(q["country"] == "ch" and q["what"] == "chef de projet", f"recherche mal envoyée : {q}")
+        check(await c.page.locator(".job-card").count() == 2, "les offres ne s'affichent pas")
+        check(await c.page.is_visible("#jobsCredit"), "la mention Adzuna doit être affichée")
+        await c.shot("offres")
+        await c.page.click('[data-job="0"]')
+        await c.page.wait_for_selector("#dossierBar:not([hidden])", timeout=8000)
+        apps = await c.page.evaluate("window.__db.applications")
+        check(apps and apps[0]["source"] == "adzuna" and apps[0]["url"].endswith("/1"), f"dossier mal créé depuis l'offre : {apps}")
+        check("analyze_offer" in c.calls, "l'offre doit être analysée (avec le résumé si la page complète est refusée)")
+        c.no_js_errors()
+
+
+async def t_offres_emploi_non_configurees(b, base):
+    async with Ctx(b, base, ai={"search_jobs": {"error": "jobs_not_configured"}}) as c:
+        await c.open("#app")
+        await c.page.click('.apptabs [data-view="jobs"]')
+        await c.page.fill("#jobWhat", "comptable"); await c.page.click("#jobsBtn"); await c.page.wait_for_timeout(500)
+        check("pas encore activée" in await c.page.inner_text("#jobsMsg"), "message attendu quand la clé Adzuna manque")
+
+
+ATS = {"score": 64, "verdict": "Bonne base, il manque des mots-clés clés.", "criteres": [
+    {"nom": "Mots-clés de l'offre", "note": 55, "commentaire": ""}, {"nom": "Expérience pertinente", "note": 75, "commentaire": ""},
+    {"nom": "Compétences et qualifications", "note": 60, "commentaire": ""}, {"nom": "Lisibilité pour un ATS", "note": 80, "commentaire": ""}],
+    "mots_cles_presents": ["Scrum"], "mots_cles_manquants": ["SEO technique", "Google Tag Manager"], "problemes": [{"titre": "Dates", "conseil": "Uniformise le format des dates."}]}
+
+
+async def t_score_ats(b, base):
+    async with Ctx(b, base, ai={"ats_score": ATS}) as c:
+        await c.open("#app")
+        await c.page.click('.apptabs [data-view="dossier"]')
+        await c.page.fill("#offerText", OFFER_TXT)
+        await c.page.click("#analyzeBtn"); await c.page.wait_for_selector("#offerOut:not([hidden])")
+        await c.step(2)
+        await c.page.click("#liAlt summary")
+        await c.page.fill("#profileText", "Camille Rochat\nChef de projet digital\nExpérience\nLe Temps\n" * 6)
+        await c.page.click("#useProfile"); await c.page.wait_for_timeout(1500)
+        await c.page.click("#atsBtn"); await c.page.wait_for_selector(".ats-gauge", timeout=5000)
+        txt = await c.page.inner_text("#atsOut")
+        check("64" in txt and "Google Tag Manager" in txt and "Uniformise" in txt, "le score ATS ne s'affiche pas correctement")
+        await c.page.wait_for_timeout(400)
+        apps = await c.page.evaluate("window.__db.applications")
+        check(apps and apps[0].get("ats_score") == 64, "le score ATS n'est pas enregistré dans le dossier")
+        await c.shot("ats")
+        c.no_js_errors()
+
+
+def tr_paras(body):
+    return {"paras": [[x.upper() for x in p["s"]] for p in body["paras"]]}
+
+
+async def t_traduction_cv_word_et_lettre(b, base):
+    async with Ctx(b, base, ai={"translate": lambda body: tr_paras(body) if body.get("what") == "cv_paras" else {"text": "Dear Sir or Madam, I am applying."}}) as c:
+        await c.open("#app")
+        await c.page.click('.apptabs [data-view="dossier"]')
+        await c.step(2)
+        await c.page.set_input_files("#cvFile", os.path.join(FIX, "cv_photo.docx"))
+        await c.page.wait_for_function("!document.querySelector('#trCvBtn').disabled", timeout=8000)
+        await c.page.select_option("#trLang", "en")
+        await c.page.click("#trCvBtn"); await c.page.wait_for_selector("#dlTrDocx:not([hidden])", timeout=8000)
+        sent = [x for x in c.bodies if x.get("action") == "translate"][0]
+        check(sent["lang"] == "en" and not any(re.fullmatch(r"[\s•·\-–—*]*", t) for p in sent["paras"] for t in p["s"]), "traduction mal envoyée")
+        async with c.page.expect_download() as d:
+            await c.page.click("#dlTrDocx")
+        doc = zipfile.ZipFile(io.BytesIO(open(await (await d.value).path(), "rb").read())).read("word/document.xml").decode("utf-8")
+        check("CAMILLE ROCHAT" in doc and "HEC LAUSANNE" in doc, "le Word traduit ne contient pas la traduction")
+        # lettre
+        await c.step(3)
+        await c.page.fill("#letterText", "Madame, Monsieur, je postule.")
+        await c.page.dispatch_event("#letterText", "input")
+        await c.page.click("#trLetterBtn"); await c.page.wait_for_timeout(500)
+        check(await c.page.input_value("#letterText") == "Dear Sir or Madam, I am applying.", "la lettre n'a pas été traduite")
+        await c.page.click("#trLetterUndo")
+        check(await c.page.input_value("#letterText") == "Madame, Monsieur, je postule.", "retour à l'original impossible")
         c.no_js_errors()
 
 

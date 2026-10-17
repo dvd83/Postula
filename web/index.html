@@ -80,9 +80,10 @@
     <div class="wrap">
       <h2>Trois étapes pour une candidature prête à envoyer</h2>
       <ol class="how">
-        <li><h3>Colle l'offre</h3><p>Le lien et le texte de l'annonce. Postula en tire les exigences et les mots-clés que les logiciels de tri recherchent.</p></li>
-        <li><h3>Adapte ton CV et ta lettre</h3><p>Ton CV Word est réécrit au plus près de l'offre, mise en page intacte. Chaque modification se valide une à une. La lettre suit.</p></li>
+        <li><h3>Trouve ou colle l'offre</h3><p>Cherche parmi les offres en Suisse et chez les voisins, ou colle un lien jobup, jobs.ch, site carrière… Postula en tire les exigences et les mots-clés que les logiciels de tri recherchent.</p></li>
+        <li><h3>Adapte ton CV et ta lettre</h3><p>Score ATS sur 100, CV Word réécrit au plus près de l'offre (mise en page intacte), lettre sur mesure, traduction en anglais, allemand ou italien.</p></li>
         <li><h3>Passe l'entretien</h3><p>Un recruteur virtuel te pose ses questions à voix haute pendant 5&nbsp;minutes. Tu reçois une note, ce qui a marché et quoi retravailler.</p></li>
+        <li><h3>Suis tes candidatures</h3><p>Chaque offre devient un dossier : statut, relances, notes, ta lettre et tes notes d'entretien, au même endroit.</p></li>
       </ol>
     </div>
   </section>
@@ -132,6 +133,52 @@
     <p class="hint">Paiement sécurisé par Stripe (carte, Apple Pay, Google Pay). Prix en francs suisses. En payant, tu acceptes les <a href="conditions.html">conditions de vente</a>.</p>
   </section>
 
+  <nav class="apptabs" aria-label="Espaces">
+    <button type="button" data-view="dash"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h10"/></svg>Mes candidatures <span class="count" id="appsCount"></span></button>
+    <button type="button" data-view="jobs"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/></svg>Offres d'emploi</button>
+    <button type="button" data-view="dossier"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg>Dossier en cours</button>
+  </nav>
+
+  <!-- MES CANDIDATURES -->
+  <section id="viewDash" class="stack" hidden>
+    <div class="dash-head">
+      <div><h2>Mes candidatures</h2><p class="lede" style="margin:0">Chaque offre est un dossier : CV adapté, lettre, entraînements à l'entretien, notes et relances.</p></div>
+      <button class="btn primary" type="button" id="newApp">Nouvelle candidature</button>
+    </div>
+    <div class="dash-stats" id="dashStats"></div>
+    <div class="chips dash-filter" id="dashFilter" role="group" aria-label="Filtrer par statut"></div>
+    <div class="dash-list" id="dashList"></div>
+  </section>
+
+  <!-- OFFRES D'EMPLOI -->
+  <section id="viewJobs" class="stack" hidden>
+    <div class="card stack">
+      <div><h2>Offres d'emploi</h2><p class="lede" style="margin:0">Cherche des offres en Suisse, puis prépare ta candidature en un clic : CV adapté, lettre et entretien d'entraînement.</p></div>
+      <form class="jobs-form" id="jobsForm">
+        <div><label for="jobWhat">Poste, métier ou mots-clés</label><input id="jobWhat" type="text" placeholder="ex. chef de projet, comptable, infirmière…" autocomplete="off"></div>
+        <div><label for="jobWhere">Lieu</label><input id="jobWhere" type="text" placeholder="ex. Genève, Lausanne, Vaud…" autocomplete="off"></div>
+        <div><label for="jobCountry">Pays</label><select id="jobCountry"><option value="ch">Suisse</option><option value="fr">France</option><option value="de">Allemagne</option><option value="it">Italie</option><option value="at">Autriche</option></select></div>
+        <button class="btn primary" id="jobsBtn">Rechercher</button>
+      </form>
+      <div id="jobsMsg"></div>
+    </div>
+    <div class="jobs-list" id="jobsList"></div>
+    <div class="row" style="justify-content:center"><button class="btn" type="button" id="jobsMore" hidden>Plus d'offres</button></div>
+    <p class="hint jobs-credit" id="jobsCredit" hidden>Offres fournies par <a href="https://www.adzuna.ch" target="_blank" rel="noopener">Adzuna</a>.</p>
+  </section>
+
+  <div id="viewDossier">
+  <div class="dossier-bar" id="dossierBar" hidden>
+    <div class="dossier-title"><span class="hint" style="margin:0">Dossier</span><b id="dosTitle"></b></div>
+    <label class="sr" for="dosStatus">Statut</label>
+    <select id="dosStatus"></select>
+    <details class="dos-more"><summary>Notes et relance</summary>
+      <div class="stack">
+        <div><label for="dosFollow">Relancer le</label><input id="dosFollow" type="date"></div>
+        <div><label for="dosNotes">Notes</label><textarea id="dosNotes" rows="3" maxlength="5000" placeholder="Contact, échanges, prochaines étapes…"></textarea></div>
+      </div>
+    </details>
+  </div>
   <nav class="steps" aria-label="Étapes">
     <ol>
       <li><button data-go="1" aria-current="step"><span class="n">1</span><span class="t">Offre</span></button></li>
@@ -203,6 +250,14 @@
             <div class="chips" id="kwChips"></div>
           </div>
         </div>
+        <div class="card stack" id="atsCard">
+          <div class="row" style="justify-content:space-between;align-items:flex-start">
+            <div><h3>Score ATS</h3><p class="lede" style="margin:0">Comment un logiciel de tri des candidatures lit ton CV face à cette offre : note sur 100, mots-clés manquants, points à corriger.</p></div>
+          </div>
+          <div id="atsOut"></div>
+          <div class="row"><button class="btn" id="atsBtn" type="button" disabled>Calculer le score</button></div>
+          <div id="atsMsg"></div>
+        </div>
         <div class="card stack" id="changesCard" hidden>
           <div class="row" style="justify-content:space-between"><h3>Modifications proposées</h3><span class="pill" id="chgCount"></span></div>
           <p class="lede" id="chgSummary"></p>
@@ -227,6 +282,15 @@
             <button class="btn" id="dlThemeDocx" hidden>Télécharger en Word (modifiable)</button>
           </div>
           <div id="themeMsg"></div>
+        </div>
+        <div class="card stack" id="trCard">
+          <div><h3>Traduire mon CV</h3><p class="lede" style="margin:0">Pour une offre dans une autre langue. Un CV Word garde sa mise en page ; sinon la version thème est traduite.</p></div>
+          <div class="row">
+            <select id="trLang" aria-label="Langue cible" style="width:auto;flex:1 1 150px"><option value="en">en anglais</option><option value="de">en allemand</option><option value="it">en italien</option><option value="fr">en français</option></select>
+            <button class="btn" id="trCvBtn" type="button" disabled>Traduire le CV</button>
+            <button class="btn" id="dlTrDocx" type="button" hidden>Télécharger le CV traduit</button>
+          </div>
+          <div id="trMsg"></div>
         </div>
       </div>
       <div class="card stack">
@@ -275,6 +339,12 @@
           <button class="btn" id="dlLetterPdf" disabled>Télécharger en PDF</button>
           <button class="btn ghost" id="copyLetter" disabled>Copier</button>
         </div>
+        <div class="row tr-letter">
+          <select id="trLetterLang" aria-label="Traduire la lettre" style="width:auto;flex:1 1 150px"><option value="en">en anglais</option><option value="de">en allemand</option><option value="it">en italien</option><option value="fr">en français</option></select>
+          <button class="btn sm" id="trLetterBtn" type="button" disabled>Traduire la lettre</button>
+          <button class="btn sm ghost" id="trLetterUndo" type="button" hidden>Revenir à l'original</button>
+        </div>
+        <div id="trLetterMsg"></div>
       </div>
     </div>
   </section>
@@ -338,6 +408,7 @@
 
     <div id="ivResult" hidden></div>
   </section>
+  </div><!-- /viewDossier -->
 </main>
 
 <footer class="site">
