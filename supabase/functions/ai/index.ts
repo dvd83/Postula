@@ -357,7 +357,7 @@ ${JSON.stringify(paras)}`);
 /* ---------- Offres d'emploi (API Adzuna) ---------- */
 const ADZ_COUNTRIES = ["ch", "fr", "de", "it", "at"] as const;
 const jobHits = new Map<string, number[]>();
-async function searchJobs(_db: SupabaseClient, uid: string, _ip: string | null, b: Record<string, unknown>) {
+async function searchJobs(db: SupabaseClient, uid: string, _ip: string | null, b: Record<string, unknown>) {
   const appId = Deno.env.get("ADZUNA_APP_ID"), appKey = Deno.env.get("ADZUNA_APP_KEY");
   if (!appId || !appKey) throw new AppError("jobs_not_configured", 503);
   const now = Date.now(), hits = (jobHits.get(uid) ?? []).filter((t) => now - t < 60_000);
@@ -367,6 +367,10 @@ async function searchJobs(_db: SupabaseClient, uid: string, _ip: string | null, 
   if (!what && !where) throw new AppError("bad_request", 400, { field: "what" });
   const country = oneOf(b.country, ADZ_COUNTRIES, "ch");
   const page = Math.max(1, Math.min(20, Math.round(Number(b.page) || 1)));
+  // Même recherche dans les 6 dernières heures : réponse en cache (l'API Adzuna est limitée en appels)
+  const cacheKey = [country, what.toLowerCase(), where.toLowerCase(), page].join("|");
+  const { data: cached } = await db.from("job_cache").select("data, created_at").eq("key", cacheKey).maybeSingle();
+  if (cached && Date.now() - new Date(cached.created_at).getTime() < 6 * 3600_000) return cached.data;
   const q = new URLSearchParams({ app_id: appId, app_key: appKey, results_per_page: "20", "content-type": "application/json" });
   if (what) q.set("what", what);
   if (where) q.set("where", where);
@@ -374,7 +378,10 @@ async function searchJobs(_db: SupabaseClient, uid: string, _ip: string | null, 
   let res: Response;
   try { res = await fetch(`https://api.adzuna.com/v1/api/jobs/${country}/search/${page}?${q}`, { signal: ctl.signal, headers: { accept: "application/json" } }); }
   catch { throw new AppError("jobs_unavailable", 502); } finally { clearTimeout(t); }
-  if (!res.ok) { console.error("adzuna", res.status, (await res.text()).slice(0, 300)); throw new AppError("jobs_unavailable", 502); }
+  if (!res.ok) {
+    console.error("adzuna", res.status, (await res.text()).slice(0, 300));
+    throw new AppError(res.status === 429 || res.status === 401 || res.status === 403 ? "jobs_quota" : "jobs_unavailable", 502);
+  }
   const data = await res.json() as { count?: number; results?: any[] };
   const strip = (s: unknown) => String(s ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
   const money = (n: unknown) => Number(n) > 0 ? Math.round(Number(n)).toLocaleString("fr-CH") : "";
@@ -389,7 +396,10 @@ async function searchJobs(_db: SupabaseClient, uid: string, _ip: string | null, 
       contract: [j.contract_time === "full_time" ? "plein temps" : j.contract_time === "part_time" ? "temps partiel" : "", j.contract_type === "permanent" ? "CDI" : j.contract_type === "contract" ? "durée déterminée" : ""].filter(Boolean).join(", "),
     };
   }).filter((j) => j.url.startsWith("https://"));
-  return { count: Number(data.count) || jobs.length, jobs };
+  const result = { count: Number(data.count) || jobs.length, jobs };
+  await db.from("job_cache").upsert({ key: cacheKey, data: result, created_at: new Date().toISOString() });
+  if (Math.random() < 0.05) await db.from("job_cache").delete().lt("created_at", new Date(Date.now() - 86400_000).toISOString());
+  return result;
 }
 
 /* CV en image (PDF scanné, CV exporté en image depuis Canva…) : l'IA lit la page et repère la photo */

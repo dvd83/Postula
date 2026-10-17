@@ -63,6 +63,7 @@ function errMsg(e){
     case "blocked":return "Ce compte est suspendu. Écris-nous si tu penses que c'est une erreur.";
     case "session_over":return "Le temps de cet entretien est écoulé.";
     case "jobs_not_configured":return "La recherche d'offres n'est pas encore activée sur Postula. En attendant, colle le lien d'une annonce dans « Dossier en cours ».";
+    case "jobs_quota":return "La recherche d'offres a atteint sa limite pour aujourd'hui. Réessaie demain, ou colle le lien d'une annonce dans « Dossier en cours ».";
     case "jobs_unavailable":return "Le service d'offres d'emploi ne répond pas pour le moment. Réessaie dans quelques minutes.";
     case "scan_unreadable":return "Le texte de ce CV en image n'a pas pu être lu. Utilise si possible un CV Word, ou un PDF exporté depuis Word ou Canva en « PDF standard ».";
     case "too_large":return "Le document est trop long. Utilise un CV de 5 pages maximum et une annonce plus courte.";
